@@ -5,6 +5,7 @@
 ## 🚧 Up Next
 
 - [ ] **Decline message** — optional text box when host denies a date. Dater sees why: "Sorry, schedule changed!"
+- [ ] **Deposit in date details** — show earnest deposit amount in request modal. Must be stateful (captured at booking time, not looked up from current settings — so if host changes deposit later, old requests show the original amount)
 
 ---
 
