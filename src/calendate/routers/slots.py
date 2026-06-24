@@ -38,7 +38,7 @@ async def create_slot(request: Request, start_time: str = Form(...), end_time: s
         await db.close()
 
     if request.headers.get("HX-Request"):
-        return _dashboard_response(request, user, cal_month, cal_year)
+        return await _dashboard_response(request, user, cal_month, cal_year)
 
     return RedirectResponse("/dashboard", status_code=302)
 
@@ -56,7 +56,7 @@ async def delete_slot(request: Request, slot_id: int):
         await db.close()
 
     if request.headers.get("HX-Request"):
-        return _dashboard_response(request, user)
+        return await _dashboard_response(request, user)
 
     return RedirectResponse("/dashboard", status_code=302)
 

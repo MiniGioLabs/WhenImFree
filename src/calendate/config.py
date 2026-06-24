@@ -4,7 +4,7 @@ from __future__ import annotations
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    APP_NAME: str = "CalDate"
+    APP_NAME: str = "CalenDate"
     SECRET_KEY: str = "replace-me"
     BASE_URL: str = "http://localhost:8000"
     DATABASE_PATH: str = ""
