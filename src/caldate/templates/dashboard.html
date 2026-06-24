@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — CalDate{% endblock %}
+{% block content %}
+
+<!-- 1. Your Link -->
+<div class="bg-white border border-gray-200 rounded-2xl p-4 mb-4">
+    <h2 class="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wide">Your Link</h2>
+    <div class="flex items-center gap-2">
+        <input type="text" readonly id="booking-link"
+               value="{{ base_url }}/book/{{ user.booking_slug }}"
+               class="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm">
+        <button onclick="var i=document.getElementById('booking-link');navigator.clipboard.writeText(i.value);var l=document.getElementById('copy-label');l.textContent='✓ Copied';setTimeout(()=>l.textContent='📋 Copy',2000)"
+                class="bg-brand text-white px-3 py-2 rounded-lg text-sm font-medium shrink-0">
+            <span id="copy-label">📋 Copy</span>
+        </button>
+    </div>
+</div>
+
+<!-- 2. Calendar -->
+<div id="dashboard-body">
+{% include "partials/_dashboard_body.html" %}
+</div>
+
+<!-- Requests -->
+{% if requests %}
+<div class="mb-6 mt-4">
+    {% set pending = requests|selectattr('status','equalto','pending')|list %}
+    {% set approved = requests|selectattr('status','equalto','approved')|list %}
+
+    {% if pending %}
+    <h2 class="text-sm font-semibold text-yellow-600 mb-2 uppercase tracking-wide">⏳ Pending ({{ pending|length }})</h2>
+    <div class="space-y-2 mb-4">
+        {% for req in pending %}
+            {% with status='pending' %}{% include "partials/request_card.html" %}{% endwith %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if approved %}
+    <h2 class="text-sm font-semibold text-green-600 mb-2 uppercase tracking-wide">✅ Confirmed ({{ approved|length }})</h2>
+    <div class="space-y-2 mb-4">
+        {% for req in approved %}
+            {% with status='approved' %}{% include "partials/request_card.html" %}{% endwith %}
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<!-- Request detail modal -->
+<div id="request-modal" class="hidden fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-sm p-5"><div id="request-detail"></div></div>
+</div>
+
+<!-- Slot modal -->
+<div id="custom-modal" class="hidden fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-sm p-5 max-h-[90vh] overflow-y-auto">
+        <h3 class="text-base font-bold mb-4">Add Time Slot</h3>
+        <form hx-post="/slots" hx-target="#dashboard-body" hx-swap="outerHTML show:top"
+              class="space-y-3">
+            <input type="hidden" name="cal_month" id="cal-month" value="{{ month }}">
+            <input type="hidden" name="cal_year" id="cal-year" value="{{ year }}">
+            <div id="modal-error"></div>
+            <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" name="all_day" id="all-day-toggle"
+                       onchange="var f=document.getElementById('time-fields');var s=document.getElementById('slot-start');var e=document.getElementById('slot-end');if(this.checked){f.style.opacity='0.4';f.style.pointerEvents='none';var d=s.value.slice(0,10);s.value=d+'T00:00';e.value=d+'T23:59'}else{f.style.opacity='1';f.style.pointerEvents='auto'}">
+                <span class="text-sm">All day</span>
+            </label>
+            <div id="time-fields" class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-sm font-medium mb-1">Start</label>
+                    <input type="datetime-local" name="start_time" id="slot-start" required
+                           onchange="autoEnd(this)" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">End (auto +4h)</label>
+                    <input type="datetime-local" name="end_time" id="slot-end" required
+                           class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand outline-none">
+                </div>
+            </div>
+            <div class="flex gap-2 pt-1">
+                <button type="button" onclick="document.getElementById('custom-modal').classList.add('hidden')"
+                        class="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-xl text-sm">Cancel</button>
+                <button type="submit" class="flex-1 bg-brand text-white py-2.5 rounded-xl text-sm">Add</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit modal -->
+<div id="edit-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-sm mx-4">
+        <h3 class="text-lg font-bold mb-4">Edit Time Slot</h3>
+        <form id="edit-form" method="POST" class="space-y-3">
+            <div>
+                <label class="block text-xs font-medium mb-1">Start</label>
+                <input type="datetime-local" name="start_time" id="edit-start" required class="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm">
+            </div>
+            <div>
+                <label class="block text-xs font-medium mb-1">End</label>
+                <input type="datetime-local" name="end_time" id="edit-end" required class="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm">
+            </div>
+            <div class="flex gap-2">
+                <button type="button" onclick="document.getElementById('edit-modal').classList.add('hidden')" class="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg text-sm">Cancel</button>
+                <button type="submit" class="flex-1 bg-brand text-white py-2.5 rounded-lg text-sm">Save</button>
+            </div>
+        </form>
+        <button onclick="deleteSlot()" class="mt-3 w-full text-xs text-red-400 hover:text-red-600 py-1">Delete this slot</button>
+    </div>
+</div>
+
+<script>
+function copyBookingLink() {
+    var i=document.getElementById('booking-link');
+    navigator.clipboard.writeText(i.value);
+    var l=document.getElementById('copy-label');
+    l.textContent='✓ Copied';
+    setTimeout(()=>l.textContent='📋 Copy',2000)
+}
+function editSlot(id,start,end) {
+    document.getElementById('edit-form').action='/slots/'+id+'/edit';
+    document.getElementById('edit-start').value=start;
+    document.getElementById('edit-end').value=end;
+    document.getElementById('edit-modal').dataset.slotId=id;
+    document.getElementById('edit-modal').classList.remove('hidden')
+}
+function deleteSlot() {
+    var id=document.getElementById('edit-modal').dataset.slotId;
+    if(!id)return;
+    document.getElementById('edit-modal').classList.add('hidden');
+    htmx.ajax('DELETE','/slots/'+id,{target:'#dashboard-body',swap:'outerHTML'})
+}
+function autoEnd(input) {
+    var s=input.value;
+    if(s){
+        var p=s.split(/[-T:]/);
+        var d=new Date(p[0],p[1]-1,p[2],p[3],p[4]);
+        d.setHours(d.getHours()+4);
+        document.getElementById('slot-end').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'T'+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')
+    }
+}
+var now=new Date();
+var today=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+function openDayModal(dateStr) {
+    document.getElementById('modal-error').innerHTML='';
+    document.getElementById('all-day-toggle').checked=false;
+    var f=document.getElementById('time-fields');
+    f.style.opacity='1';f.style.pointerEvents='auto';
+    document.getElementById('slot-start').value=dateStr+'T19:00';
+    autoEnd(document.getElementById('slot-start'));
+    var cal=document.getElementById('calendar-container');
+    if(cal){document.getElementById('cal-month').value=cal.dataset.month;document.getElementById('cal-year').value=cal.dataset.year}
+    document.getElementById('custom-modal').classList.remove('hidden')
+}
+function showRequestModal(reqId) {
+    document.getElementById('request-modal').classList.remove('hidden');
+    document.getElementById('request-detail').innerHTML='<p class=\"text-sm text-gray-400 text-center py-4\">Loading…</p>';
+    htmx.ajax('GET','/requests/'+reqId+'/detail','#request-detail')
+}
+document.body.addEventListener('closeModal',function(){
+    document.getElementById('request-modal').classList.add('hidden');
+    var c=document.getElementById('custom-modal');
+    if(c)c.classList.add('hidden')
+});
+document.body.addEventListener('modalError',function(){window._modalError=true});
+</script>
+{% endblock %}

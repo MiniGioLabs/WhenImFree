@@ -1,0 +1,36 @@
+<div class="bg-white border border-gray-200 rounded-xl p-3 cursor-pointer hover:border-brand/30 transition
+            {% if status == 'approved' %}border-l-4 border-l-green-500{% endif %}"
+     onclick="showRequestModal({{ req.id }})">
+    <div class="flex justify-between items-start">
+        <div>
+            <p class="text-sm font-medium">{{ req.date_name }}</p>
+            <p class="text-xs text-gray-500">{{ format_slot_day(req.start_time) }}</p>
+            {% if req.proposed_start %}
+            <p class="text-xs text-gray-600">{{ format_time(req.proposed_start) }} – {{ format_time(req.proposed_end) }}</p>
+            {% else %}
+            <p class="text-xs text-gray-600">{{ format_time(req.start_time) }} – {{ format_time(req.end_time) }}</p>
+            {% endif %}
+            {% if req.label %}
+            <p class="text-xs text-gray-400 mt-0.5">
+                {% set icons = {'dinner':'🍽️','drinks':'🍸','coffee':'☕','movies':'🎬','walk':'🚶'} %}
+                {{ icons.get(req.label,'📌') }} {{ req.label|capitalize }}
+            </p>
+            {% endif %}
+        </div>
+        <span class="text-xs px-2 py-0.5 rounded-full font-medium
+                     {% if status == 'pending' %}bg-yellow-100 text-yellow-700
+                     {% elif status == 'approved' %}bg-green-100 text-green-700{% endif %}">
+            {{ status|capitalize }}
+        </span>
+    </div>
+    {% if status == 'approved' and req.share_token %}
+    <div class="mt-2 pt-2 border-t border-gray-100">
+        <div class="flex items-center gap-2">
+            <input type="text" readonly value="{{ base_url }}/date/{{ req.share_token }}"
+                   class="flex-1 bg-gray-50 border rounded px-2 py-1 text-xs">
+            <button onclick="event.stopPropagation();var i=this.previousElementSibling;navigator.clipboard.writeText(i.value);this.textContent='✓';setTimeout(()=>this.textContent='📋',2000)"
+                    class="text-xs bg-brand text-white px-2 py-1 rounded">📋 Copy</button>
+        </div>
+    </div>
+    {% endif %}
+</div>

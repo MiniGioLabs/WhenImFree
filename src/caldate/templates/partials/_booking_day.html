@@ -1,0 +1,31 @@
+<div class="bg-white border border-gray-200 rounded-2xl p-4 mt-2">
+    <h3 class="text-sm font-semibold mb-3">{{ date_str }}</h3>
+    {% for slot in slots %}
+    <div class="border border-gray-100 rounded-xl p-3 mb-2">
+        <p class="text-sm font-medium">{{ format_time(slot.start_time) }} – {{ format_time(slot.end_time) }}</p>
+        <div id="picker-{{ slot.id }}">
+            <form hx-post="/book/{{ token }}/reserve" hx-target="#day-slots" hx-swap="innerHTML" class="space-y-3 mt-2">
+                <input type="hidden" name="slot_id" value="{{ slot.id }}">
+                <input type="hidden" name="proposed_start" value="{{ slot.start_time[11:16] }}">
+                <input type="hidden" name="proposed_end" value="{{ slot.end_time[11:16] }}">
+                <select name="label" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
+                    <option value="">Just a date</option>
+                    <option value="dinner">🍽️ Dinner</option>
+                    <option value="drinks">🍸 Drinks</option>
+                    <option value="coffee">☕ Coffee</option>
+                </select>
+                <input type="text" name="location" placeholder="Location (optional)" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
+                <input type="text" name="date_name" required maxlength="40" placeholder="Your name" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
+                <input type="tel" name="date_phone" required pattern="[\d\s\(\)\-\.\+]{10,}" placeholder="Your phone" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
+                {% if deposit_cents > 0 %}
+                <p class="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">💰 ${{ "%.2f"|format(deposit_cents/100) }} deposit required.</p>
+                {% endif %}
+                <button type="submit" class="w-full bg-brand text-white py-2.5 rounded-xl text-sm font-medium">Request Date</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+    {% if not slots %}
+    <p class="text-sm text-gray-400 text-center py-4">No availability for this date.</p>
+    {% endif %}
+</div>
