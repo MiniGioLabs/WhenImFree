@@ -4,8 +4,12 @@
 <div class="max-w-lg mx-auto">
     <!-- Host profile -->
     <div class="text-center mb-6">
-        <div class="w-16 h-16 bg-brand text-white rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-3">
+        <div class="w-16 h-16 bg-brand text-white rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-3 overflow-hidden">
+            {% if host.avatar_url %}
+            <img src="{{ host.avatar_url }}" class="w-full h-full object-cover">
+            {% else %}
             {{ host.name[0]|upper }}
+            {% endif %}
         </div>
         <h1 class="text-xl font-bold">{{ host.name }}</h1>
         <p class="text-gray-500 text-sm">Pick a date to book</p>
@@ -13,39 +17,7 @@
 
     <!-- Calendar -->
     <div class="bg-white border border-gray-200 rounded-2xl p-4 mb-4">
-        <div class="flex items-center justify-between mb-3">
-            <button hx-get="/book/{{ token }}/calendar?month={{ cal.month-1 if cal.month>1 else 12 }}&year={{ cal.year if cal.month>1 else cal.year-1 }}"
-                    hx-target="#calendar-container" class="text-gray-400 hover:text-gray-600">&larr;</button>
-            <h2 class="text-sm font-semibold">
-                {% set months = ['January','February','March','April','May','June','July','August','September','October','November','December'] %}
-                {{ months[cal.month-1] }} {{ cal.year }}
-            </h2>
-            <button hx-get="/book/{{ token }}/calendar?month={{ cal.month+1 if cal.month<12 else 1 }}&year={{ cal.year if cal.month<12 else cal.year+1 }}"
-                    hx-target="#calendar-container" class="text-gray-400 hover:text-gray-600">&rarr;</button>
-        </div>
-        <div id="calendar-container">
-            <div class="grid grid-cols-7 text-center text-xs text-gray-400 py-1">
-                <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
-            </div>
-            {% for week in cal.weeks %}
-            <div class="grid grid-cols-7">
-                {% for day in week %}
-                {% if day.is_other_month %}
-                <div class="py-2"></div>
-                {% elif day.is_open %}
-                <button hx-get="/book/{{ token }}/day?date={{ day.date_str }}"
-                        hx-target="#day-slots"
-                        class="py-2 text-sm font-medium rounded-lg hover:bg-brand hover:text-white transition
-                               {% if day.is_today %}bg-brand text-white{% endif %}">
-                    {{ day.day }}
-                </button>
-                {% else %}
-                <div class="py-2 text-sm text-gray-300 {% if day.is_today %}font-bold text-gray-400{% endif %}">{{ day.day }}</div>
-                {% endif %}
-                {% endfor %}
-            </div>
-            {% endfor %}
-        </div>
+        {% include "partials/_booking_calendar.html" %}
     </div>
 
     <!-- Day detail -->

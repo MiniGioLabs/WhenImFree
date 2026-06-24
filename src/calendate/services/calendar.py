@@ -42,16 +42,20 @@ def _build_calendar(year: int, month: int, slots: list, booked: list, approved_r
     return weeks
 
 
-def _build_booking_calendar(slots: list, year: int = None, month: int = None) -> dict:
+def _build_booking_calendar(slots: list, booked_by_slot: dict | None = None, year: int = None, month: int = None) -> dict:
     import calendar as cal_mod
     from datetime import date
 
     today = date.today()
     if year is None: year = today.year
     if month is None: month = today.month
+    booked_by_slot = booked_by_slot or {}
 
     cal = cal_mod.Calendar(cal_mod.SUNDAY)
-    open_dates = set(s["start_time"][:10] for s in slots)
+    open_dates = set()
+    for s in slots:
+        if _free_time_ranges(s, booked_by_slot.get(s["id"], [])):
+            open_dates.add(s["start_time"][:10])
 
     weeks = []
     for week in cal.monthdayscalendar(year, month):

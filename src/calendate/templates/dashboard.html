@@ -3,49 +3,36 @@
 {% block content %}
 
 <!-- 1. Your Link -->
-<div class="bg-white border border-gray-200 rounded-2xl p-4 mb-4">
-    <h2 class="text-sm font-semibold text-gray-500 mb-3 uppercase tracking-wide">Your Link</h2>
+<div class="bg-gradient-to-br from-brand to-brand-dark rounded-2xl p-4 mb-4 text-white shadow-sm shadow-brand/30">
+    <div class="flex items-center gap-3 mb-3">
+        <div class="w-10 h-10 rounded-full bg-white/15 flex items-center justify-center text-lg font-bold overflow-hidden shrink-0">
+            {% if user.avatar_url %}
+            <img src="{{ user.avatar_url }}" class="w-full h-full object-cover">
+            {% else %}
+            {{ user.name[0]|upper }}
+            {% endif %}
+        </div>
+        <div>
+            <p class="text-[11px] text-white/70 uppercase tracking-wide">Your link</p>
+            <p class="text-sm font-semibold">Share it, get a date 💌</p>
+        </div>
+    </div>
     <div class="flex items-center gap-2">
         <input type="text" readonly id="booking-link"
                value="{{ base_url }}/book/{{ user.booking_slug }}"
-               class="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm">
+               class="flex-1 bg-white/15 border border-white/20 rounded-lg px-3 py-2 text-sm text-white placeholder-white/60 outline-none">
         <button onclick="var i=document.getElementById('booking-link');navigator.clipboard.writeText(i.value);var l=document.getElementById('copy-label');l.textContent='✓ Copied';setTimeout(()=>l.textContent='📋 Copy',2000)"
-                class="bg-brand text-white px-3 py-2 rounded-lg text-sm font-medium shrink-0">
+                class="bg-white text-brand px-3 py-2 rounded-lg text-sm font-medium shrink-0 hover:bg-gray-50">
             <span id="copy-label">📋 Copy</span>
         </button>
     </div>
+    <a href="/book/{{ user.booking_slug }}" target="_blank" class="inline-block text-xs text-white/70 hover:text-white mt-2">View your page →</a>
 </div>
 
 <!-- 2. Calendar -->
 <div id="dashboard-body">
 {% include "partials/_dashboard_body.html" %}
 </div>
-
-<!-- Requests -->
-{% if requests %}
-<div class="mb-6 mt-4">
-    {% set pending = requests|selectattr('status','equalto','pending')|list %}
-    {% set approved = requests|selectattr('status','equalto','approved')|list %}
-
-    {% if pending %}
-    <h2 class="text-sm font-semibold text-yellow-600 mb-2 uppercase tracking-wide">⏳ Pending ({{ pending|length }})</h2>
-    <div class="space-y-2 mb-4">
-        {% for req in pending %}
-            {% with status='pending' %}{% include "partials/request_card.html" %}{% endwith %}
-        {% endfor %}
-    </div>
-    {% endif %}
-
-    {% if approved %}
-    <h2 class="text-sm font-semibold text-green-600 mb-2 uppercase tracking-wide">✅ Confirmed ({{ approved|length }})</h2>
-    <div class="space-y-2 mb-4">
-        {% for req in approved %}
-            {% with status='approved' %}{% include "partials/request_card.html" %}{% endwith %}
-        {% endfor %}
-    </div>
-    {% endif %}
-</div>
-{% endif %}
 
 <!-- Request detail modal -->
 <div id="request-modal" class="hidden fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50" onclick="if(event.target===this)this.classList.add('hidden')">
@@ -55,33 +42,58 @@
 <!-- Slot modal -->
 <div id="custom-modal" class="hidden fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50" onclick="if(event.target===this)this.classList.add('hidden')">
     <div class="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-sm p-5 max-h-[90vh] overflow-y-auto">
-        <h3 class="text-base font-bold mb-4">Add Time Slot</h3>
-        <form hx-post="/slots" hx-target="#dashboard-body" hx-swap="outerHTML show:top"
-              class="space-y-3">
+        <h3 class="text-base font-bold mb-1">When are you free? 🎯</h3>
+        <p class="text-xs text-gray-400 mb-4">Tap a suggestion or add your own — stack as many as you want.</p>
+
+        <div id="modal-error"></div>
+
+        <div class="flex flex-wrap gap-2 mb-4">
+            <button type="button" data-chip="tonight" onclick="toggleSuggestion('tonight')"
+                    class="suggestion-chip px-3 py-1.5 rounded-full text-xs font-medium border border-gray-200 text-gray-600 hover:border-brand transition-colors">🌙 Tonight</button>
+            <button type="button" data-chip="tomorrow" onclick="toggleSuggestion('tomorrow')"
+                    class="suggestion-chip px-3 py-1.5 rounded-full text-xs font-medium border border-gray-200 text-gray-600 hover:border-brand transition-colors">☀️ Tomorrow night</button>
+            <button type="button" data-chip="weekend" onclick="toggleSuggestion('weekend')"
+                    class="suggestion-chip px-3 py-1.5 rounded-full text-xs font-medium border border-gray-200 text-gray-600 hover:border-brand transition-colors">🎉 This weekend</button>
+            <button type="button" data-chip="weeknights" onclick="toggleSuggestion('weeknights')"
+                    class="suggestion-chip px-3 py-1.5 rounded-full text-xs font-medium border border-gray-200 text-gray-600 hover:border-brand transition-colors">📅 Weeknights, next week</button>
+        </div>
+
+        <div id="pending-list" class="space-y-1.5 mb-4"></div>
+
+        <details class="mb-1">
+            <summary class="text-xs text-gray-400 cursor-pointer mb-2 select-none">+ custom time</summary>
+            <div class="space-y-3 pt-1">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="all-day-toggle"
+                           onchange="var f=document.getElementById('time-fields');var s=document.getElementById('slot-start');var e=document.getElementById('slot-end');if(this.checked){f.style.opacity='0.4';f.style.pointerEvents='none';var d=(s.value||today).slice(0,10);s.value=d+'T00:00';e.value=d+'T23:59'}else{f.style.opacity='1';f.style.pointerEvents='auto'}">
+                    <span class="text-sm">All day</span>
+                </label>
+                <div id="time-fields" class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium mb-1">Start</label>
+                        <input type="datetime-local" id="slot-start"
+                               onchange="autoEnd(this)" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium mb-1">End</label>
+                        <input type="datetime-local" id="slot-end"
+                               class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand outline-none">
+                    </div>
+                </div>
+                <button type="button" onclick="addCustomBlock()"
+                        class="w-full bg-gray-100 text-gray-700 py-2 rounded-xl text-sm font-medium hover:bg-gray-200">+ Add this time</button>
+            </div>
+        </details>
+
+        <form id="bulk-form" hx-post="/slots/bulk" hx-target="#dashboard-body" hx-swap="outerHTML show:top" class="mt-4">
             <input type="hidden" name="cal_month" id="cal-month" value="{{ month }}">
             <input type="hidden" name="cal_year" id="cal-year" value="{{ year }}">
-            <div id="modal-error"></div>
-            <label class="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" name="all_day" id="all-day-toggle"
-                       onchange="var f=document.getElementById('time-fields');var s=document.getElementById('slot-start');var e=document.getElementById('slot-end');if(this.checked){f.style.opacity='0.4';f.style.pointerEvents='none';var d=s.value.slice(0,10);s.value=d+'T00:00';e.value=d+'T23:59'}else{f.style.opacity='1';f.style.pointerEvents='auto'}">
-                <span class="text-sm">All day</span>
-            </label>
-            <div id="time-fields" class="grid grid-cols-2 gap-3">
-                <div>
-                    <label class="block text-sm font-medium mb-1">Start</label>
-                    <input type="datetime-local" name="start_time" id="slot-start" required
-                           onchange="autoEnd(this)" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand outline-none">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium mb-1">End (auto +4h)</label>
-                    <input type="datetime-local" name="end_time" id="slot-end" required
-                           class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand outline-none">
-                </div>
-            </div>
-            <div class="flex gap-2 pt-1">
+            <input type="hidden" name="blocks" id="blocks-input" value="[]">
+            <div class="flex gap-2">
                 <button type="button" onclick="document.getElementById('custom-modal').classList.add('hidden')"
                         class="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-xl text-sm">Cancel</button>
-                <button type="submit" class="flex-1 bg-brand text-white py-2.5 rounded-xl text-sm">Add</button>
+                <button type="submit" id="submit-blocks-btn" disabled
+                        class="flex-1 bg-brand text-white py-2.5 rounded-xl text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed">Add slot 🚀</button>
             </div>
         </form>
     </div>
@@ -141,6 +153,102 @@ function autoEnd(input) {
 }
 var now=new Date();
 var today=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+
+var pendingBlocks=[];
+function pad2(n){return String(n).padStart(2,'0')}
+function toLocalStr(d){return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate())+'T'+pad2(d.getHours())+':'+pad2(d.getMinutes())}
+function addDays(d,n){var r=new Date(d);r.setDate(r.getDate()+n);return r}
+function atTime(d,h,m){var r=new Date(d);r.setHours(h,m,0,0);return r}
+function fmtLabel(start,end){
+    var s=new Date(start.replace('T',' '));
+    var e=new Date(end.replace('T',' '));
+    var dayStr=s.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+    var fmtT=function(d){var h=d.getHours()%12||12;var m=d.getMinutes();return h+(m?':'+pad2(m):'')+(d.getHours()<12?'am':'pm')};
+    return dayStr+', '+fmtT(s)+'–'+fmtT(e);
+}
+function buildSuggestion(key) {
+    var n=new Date();
+    var dow=n.getDay();
+    if(key==='tonight') {
+        return [{start:toLocalStr(atTime(n,19,0)),end:toLocalStr(atTime(n,23,0))}];
+    }
+    if(key==='tomorrow') {
+        var d=addDays(n,1);
+        return [{start:toLocalStr(atTime(d,19,0)),end:toLocalStr(atTime(d,23,0))}];
+    }
+    if(key==='weekend') {
+        var sat=addDays(n,(6-dow+7)%7);
+        var sun=addDays(sat,1);
+        return [
+            {start:toLocalStr(atTime(sat,12,0)),end:toLocalStr(atTime(sat,22,0))},
+            {start:toLocalStr(atTime(sun,12,0)),end:toLocalStr(atTime(sun,20,0))}
+        ];
+    }
+    if(key==='weeknights') {
+        var offset=(1-dow+7)%7;
+        var monday=addDays(n,offset===0?7:offset);
+        var blocks=[];
+        for(var i=0;i<5;i++){
+            var d=addDays(monday,i);
+            blocks.push({start:toLocalStr(atTime(d,19,0)),end:toLocalStr(atTime(d,22,0))});
+        }
+        return blocks;
+    }
+    return [];
+}
+function toggleSuggestion(key) {
+    var btn=document.querySelector('[data-chip="'+key+'"]');
+    var active=btn.classList.contains('chip-active');
+    if(active){
+        pendingBlocks=pendingBlocks.filter(function(b){return b.group!==key});
+        btn.classList.remove('chip-active','bg-brand','text-white','border-brand');
+        btn.classList.add('border-gray-200','text-gray-600');
+    } else {
+        buildSuggestion(key).forEach(function(b){b.key='blk-'+Math.random().toString(36).slice(2);b.group=key;pendingBlocks.push(b)});
+        btn.classList.add('chip-active','bg-brand','text-white','border-brand');
+        btn.classList.remove('border-gray-200','text-gray-600');
+    }
+    renderPending();
+}
+function addCustomBlock() {
+    var s=document.getElementById('slot-start').value;
+    var e=document.getElementById('slot-end').value;
+    var err=document.getElementById('modal-error');
+    if(!s||!e){err.innerHTML='<div class="bg-red-50 text-red-600 text-sm px-4 py-3 rounded-xl mt-2">Pick a start and end time.</div>';return}
+    if(e<=s){err.innerHTML='<div class="bg-red-50 text-red-600 text-sm px-4 py-3 rounded-xl mt-2">End time must be after start.</div>';return}
+    err.innerHTML='';
+    pendingBlocks.push({key:'blk-'+Math.random().toString(36).slice(2),start:s,end:e,group:null});
+    renderPending();
+}
+function removeBlock(key) {
+    var b=pendingBlocks.find(function(x){return x.key===key});
+    pendingBlocks=pendingBlocks.filter(function(x){return x.key!==key});
+    if(b&&b.group&&!pendingBlocks.some(function(x){return x.group===b.group})){
+        var btn=document.querySelector('[data-chip="'+b.group+'"]');
+        if(btn){btn.classList.remove('chip-active','bg-brand','text-white','border-brand');btn.classList.add('border-gray-200','text-gray-600')}
+    }
+    renderPending();
+}
+function renderPending() {
+    var list=document.getElementById('pending-list');
+    list.innerHTML='';
+    pendingBlocks.forEach(function(b){
+        var row=document.createElement('div');
+        row.className='flex items-center justify-between bg-brand/5 text-sm rounded-lg px-3 py-2';
+        var span=document.createElement('span');
+        span.textContent=fmtLabel(b.start,b.end);
+        var btn=document.createElement('button');
+        btn.type='button';btn.textContent='✕';
+        btn.className='text-gray-400 hover:text-red-500 ml-2';
+        btn.onclick=function(){removeBlock(b.key)};
+        row.appendChild(span);row.appendChild(btn);
+        list.appendChild(row);
+    });
+    var submitBtn=document.getElementById('submit-blocks-btn');
+    submitBtn.disabled=pendingBlocks.length===0;
+    submitBtn.textContent=pendingBlocks.length>1?('Add '+pendingBlocks.length+' slots 🚀'):'Add slot 🚀';
+    document.getElementById('blocks-input').value=JSON.stringify(pendingBlocks.map(function(b){return {start_time:b.start,end_time:b.end}}));
+}
 function openDayModal(dateStr) {
     document.getElementById('modal-error').innerHTML='';
     document.getElementById('all-day-toggle').checked=false;
@@ -148,6 +256,9 @@ function openDayModal(dateStr) {
     f.style.opacity='1';f.style.pointerEvents='auto';
     document.getElementById('slot-start').value=dateStr+'T19:00';
     autoEnd(document.getElementById('slot-start'));
+    document.querySelectorAll('.suggestion-chip').forEach(function(btn){btn.classList.remove('chip-active','bg-brand','text-white','border-brand');btn.classList.add('border-gray-200','text-gray-600')});
+    pendingBlocks=[];
+    renderPending();
     var cal=document.getElementById('calendar-container');
     if(cal){document.getElementById('cal-month').value=cal.dataset.month;document.getElementById('cal-year').value=cal.dataset.year}
     document.getElementById('custom-modal').classList.remove('hidden')

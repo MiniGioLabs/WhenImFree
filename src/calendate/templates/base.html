@@ -16,6 +16,7 @@
             <div class="flex gap-3 text-sm items-center">
                 {% if request.session.get('user_phone') %}
                     <a href="/dashboard" class="text-gray-500 hover:text-brand font-medium">Dashboard</a>
+                    <a href="/settings" class="text-gray-500 hover:text-brand font-medium">Settings</a>
                     <a href="/logout" class="text-gray-400 hover:text-red-500">Log out</a>
                 {% else %}
                     <a href="/login" class="text-gray-500 hover:text-brand font-medium">Log in</a>
@@ -25,6 +26,6 @@
         </div>
     </nav>
     <main class="max-w-2xl mx-auto px-4 py-6">{% block content %}{% endblock %}</main>
-    <footer class="text-center text-gray-400 text-xs py-8">CalenDate — MiniGioLabs</footer>
+    <footer class="text-center text-gray-400 text-xs py-8">CalenDate 📅 — MiniGioLabs</footer>
 </body>
 </html>

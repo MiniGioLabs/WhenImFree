@@ -13,6 +13,22 @@ from ..utils import render, send_sms
 router = APIRouter()
 
 
+async def _booked_by_slot(db, slots: list) -> dict:
+    """Map slot_id -> list of its approved bookings, for free-time calculation."""
+    slot_ids = [s["id"] for s in slots]
+    if not slot_ids:
+        return {}
+    placeholders = ",".join("?" for _ in slot_ids)
+    rows = [dict(r) for r in await (await db.execute(
+        f"SELECT slot_id, proposed_start, proposed_end FROM date_requests "
+        f"WHERE slot_id IN ({placeholders}) AND status='approved'", slot_ids
+    )).fetchall()]
+    booked_by_slot: dict = {}
+    for r in rows:
+        booked_by_slot.setdefault(r["slot_id"], []).append(r)
+    return booked_by_slot
+
+
 @router.get("/book/{token}", response_class=HTMLResponse)
 async def booking_page(request: Request, token: str):
     """Cal.com-style public booking page."""
@@ -34,11 +50,39 @@ async def booking_page(request: Request, token: str):
         slots = [dict(r) for r in await (await db.execute(
             "SELECT * FROM availability_slots WHERE user_id=? ORDER BY start_time", (user["id"],)
         )).fetchall()]
+        booked_by_slot = await _booked_by_slot(db, slots)
     finally:
         await db.close()
 
-    cal = _build_booking_calendar(slots)
+    cal = _build_booking_calendar(slots, booked_by_slot=booked_by_slot)
     return render(request, "booking.html", host=user, slots=slots, cal=cal, token=user["booking_slug"])
+
+
+@router.get("/book/{token}/calendar", response_class=HTMLResponse)
+async def booking_calendar(request: Request, token: str):
+    """Month navigation for the public booking calendar."""
+    db = await get_db()
+    try:
+        user = await (await db.execute(
+            "SELECT * FROM users WHERE booking_slug = ?", (token,)
+        )).fetchone()
+        if not user:
+            return HTMLResponse(
+                "<div class='text-center py-20'><h1 class='text-2xl font-bold'>Link not found</h1></div>"
+            )
+        user = dict(user)
+        slots = [dict(r) for r in await (await db.execute(
+            "SELECT * FROM availability_slots WHERE user_id=? ORDER BY start_time", (user["id"],)
+        )).fetchall()]
+        booked_by_slot = await _booked_by_slot(db, slots)
+    finally:
+        await db.close()
+
+    month = request.query_params.get("month")
+    year = request.query_params.get("year")
+    cal = _build_booking_calendar(slots, booked_by_slot=booked_by_slot,
+                                  year=int(year) if year else None, month=int(month) if month else None)
+    return render(request, "partials/_booking_calendar.html", cal=cal, token=token)
 
 
 @router.get("/book/{token}/day", response_class=HTMLResponse)

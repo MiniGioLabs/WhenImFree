@@ -15,6 +15,28 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.get("/date/{share_token}", response_class=HTMLResponse)
+async def view_shared_date(request: Request, share_token: str):
+    """Public, fun confirmation page for a booked date — shareable with friends."""
+    db = await get_db()
+    try:
+        req = await (await db.execute(
+            """SELECT r.*, a.start_time, a.end_time, u.name as host_name
+               FROM date_requests r JOIN availability_slots a ON r.slot_id=a.id
+               JOIN users u ON a.user_id=u.id
+               WHERE r.share_token=? AND r.status='approved'""",
+            (share_token,))).fetchone()
+    finally:
+        await db.close()
+
+    if not req:
+        return HTMLResponse(
+            "<div class='text-center py-20'><h1 class='text-2xl font-bold'>Date not found</h1></div>"
+        )
+
+    return render(request, "date_share.html", req=dict(req))
+
+
 @router.get("/requests/{request_id}/detail", response_class=HTMLResponse)
 async def request_detail(request: Request, request_id: int):
     user = await get_current_user(request)
@@ -61,7 +83,7 @@ async def approve_request(request: Request, request_id: int):
         await db.close()
 
     if request.headers.get("HX-Request"):
-        return _dashboard_response(request, user)
+        return await _dashboard_response(request, user)
     return render(request, "partials/request_card.html", req=dict(req), status="approved", base_url=settings.BASE_URL)
 
 
@@ -89,7 +111,7 @@ async def deny_request(request: Request, request_id: int):
             logger.error("Refund failed: %s", e)
 
     if request.headers.get("HX-Request"):
-        return _dashboard_response(request, user)
+        return await _dashboard_response(request, user)
     return HTMLResponse("")
 
 
@@ -128,7 +150,7 @@ async def cancel_request(request: Request, request_id: int):
 
     user = await get_current_user(request)
     if user and request.headers.get("HX-Request"):
-        return _dashboard_response(request, user)
+        return await _dashboard_response(request, user)
     return HTMLResponse("")
 
 

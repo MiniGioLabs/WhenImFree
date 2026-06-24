@@ -77,6 +77,13 @@ async def init_db() -> None:
                 reminder_type TEXT NOT NULL
             );
         """)
+
+        cols = [r["name"] for r in await (await db.execute("PRAGMA table_info(users)")).fetchall()]
+        if "avatar_url" not in cols:
+            await db.execute("ALTER TABLE users ADD COLUMN avatar_url TEXT")
+        if "deposit_cents" not in cols:
+            await db.execute("ALTER TABLE users ADD COLUMN deposit_cents INTEGER DEFAULT 0")
+
         await db.commit()
         logger.info("Database initialized")
     finally:

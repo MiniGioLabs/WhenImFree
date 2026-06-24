@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import stripe
 from fastapi import FastAPI, Request
@@ -13,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from .config import settings
-from .utils import render, templates
+from .utils import render, templates, static_dir
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -30,16 +29,16 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="CalenDate", lifespan=lifespan)
 app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY, session_cookie="calendate")
 
-static_dir = Path(settings.STATIC_DIR) if settings.STATIC_DIR else Path(__file__).parent / "static"
 static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-from .routers import auth, dashboard, slots, booking, requests
+from .routers import auth, dashboard, slots, booking, requests, profile
 app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(slots.router)
 app.include_router(booking.router)
 app.include_router(requests.router)
+app.include_router(profile.router)
 
 
 @app.get("/", response_class=HTMLResponse)

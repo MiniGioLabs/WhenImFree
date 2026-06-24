@@ -66,6 +66,7 @@ def format_time(iso: str) -> str:
 
 _tdir = Path(settings.TEMPLATES_DIR) if settings.TEMPLATES_DIR else Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(_tdir))
+static_dir = Path(settings.STATIC_DIR) if settings.STATIC_DIR else Path(__file__).parent / "static"
 templates.env.globals["format_slot_time"] = format_slot_time
 templates.env.globals["format_slot_day"] = format_slot_day
 templates.env.globals["format_time"] = format_time

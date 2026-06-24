@@ -1,5 +1,6 @@
 """Slot CRUD routes."""
 
+import json
 from datetime import date, datetime
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -33,6 +34,45 @@ async def create_slot(request: Request, start_time: str = Form(...), end_time: s
             "INSERT INTO availability_slots (user_id, token, start_time, end_time, deposit_cents) VALUES (?, ?, ?, ?, 0)",
             (user["id"], token, start_time, end_time),
         )
+        await db.commit()
+    finally:
+        await db.close()
+
+    if request.headers.get("HX-Request"):
+        return await _dashboard_response(request, user, cal_month, cal_year)
+
+    return RedirectResponse("/dashboard", status_code=302)
+
+
+@router.post("/slots/bulk", response_class=HTMLResponse)
+async def create_slots_bulk(request: Request, blocks: str = Form(...),
+                            cal_month: str = Form(""), cal_year: str = Form("")):
+    user = await get_current_user(request)
+    if not user:
+        return Response(status_code=401)
+
+    try:
+        items = json.loads(blocks)
+    except (TypeError, ValueError):
+        items = []
+    valid = [b for b in items if isinstance(b, dict) and b.get("start_time") and b.get("end_time")
+             and b["end_time"] > b["start_time"]]
+
+    if not valid:
+        if request.headers.get("HX-Request"):
+            resp = HTMLResponse('<div class="bg-red-50 text-red-600 text-sm px-4 py-3 rounded-xl mt-2">Add at least one valid time block.</div>')
+            resp.headers["HX-Retarget"] = "#modal-error"
+            resp.headers["HX-Reswap"] = "innerHTML"
+            return resp
+        return RedirectResponse("/dashboard?error=invalid_times", status_code=302)
+
+    db = await get_db()
+    try:
+        for b in valid:
+            await db.execute(
+                "INSERT INTO availability_slots (user_id, token, start_time, end_time, deposit_cents) VALUES (?, ?, ?, ?, 0)",
+                (user["id"], generate_token(), b["start_time"], b["end_time"]),
+            )
         await db.commit()
     finally:
         await db.close()
