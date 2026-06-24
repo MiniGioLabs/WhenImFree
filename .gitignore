@@ -8,3 +8,12 @@ wheels/
 
 # Virtual environments
 .venv
+
+# IDE
+.idea/
+
+# Local database
+calendate.db
+
+# Secrets
+.env
