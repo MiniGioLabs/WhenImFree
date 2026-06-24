@@ -25,3 +25,4 @@
 - [ ] Video call link generation (Zoom/Meet)
 - [ ] Mobile PWA support
 - [ ] Admin panel for hosts
+- [ ] **Friend follow-ups** — friends sign up for updates on shared date links, get notified how it went
