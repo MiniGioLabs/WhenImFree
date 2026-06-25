@@ -129,15 +129,14 @@ async def cancel_request(request: Request, request_id: int):
     db = await get_db()
     try:
         req = await (await db.execute(
-            "SELECT r.*, a.user_id FROM date_requests r JOIN availability_slots a ON r.slot_id=a.id WHERE r.id=?", (request_id,))).fetchone()
+            "SELECT r.*, a.user_id, a.start_time, a.end_time FROM date_requests r JOIN availability_slots a ON r.slot_id=a.id WHERE r.id=?", (request_id,))).fetchone()
         if not req: return HTMLResponse("Not found", status_code=404)
 
         prop_start = req["proposed_start"] or req["start_time"]
         prop_end = req["proposed_end"] or req["end_time"]
 
         try:
-            # Delete the request first: it's the FK owner of slot_id, and
-            # _restore_cancelled_booking may delete that exact slot row while merging.
+            await db.execute("DELETE FROM reminders WHERE request_id=?", (request_id,))
             await db.execute("DELETE FROM date_requests WHERE id=?", (request_id,))
             await _restore_cancelled_booking(db, req["user_id"], prop_start, prop_end)
         except Exception:

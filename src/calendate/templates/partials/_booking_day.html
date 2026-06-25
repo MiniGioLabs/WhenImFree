@@ -7,28 +7,41 @@
             <form hx-post="/book/{{ token }}/reserve" hx-target="#day-slots" hx-swap="innerHTML" class="space-y-3 mt-2">
                 <input type="hidden" name="slot_id" value="{{ slot.id }}">
                 <p class="text-xs text-gray-400">Want a shorter window? Narrow the time below.</p>
-                <div class="grid grid-cols-2 gap-2">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
                         <label class="block text-xs text-gray-500 mb-1">Start</label>
-                        <input type="time" name="proposed_start" id="start-{{ slot.id }}" required
-                               value="{{ slot.start_time[11:16] }}" min="{{ slot.start_time[11:16] }}" max="{{ slot.end_time[11:16] }}"
-                               oninput="clampSubRange({{ slot.id }})"
-                               class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
+                        <select name="proposed_start" id="start-{{ slot.id }}"
+                                onchange="clampSubRange({{ slot.id }})"
+                                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"></select>
                     </div>
                     <div>
                         <label class="block text-xs text-gray-500 mb-1">End</label>
-                        <input type="time" name="proposed_end" id="end-{{ slot.id }}" required
-                               value="{{ slot.end_time[11:16] }}" min="{{ slot.start_time[11:16] }}" max="{{ slot.end_time[11:16] }}"
-                               oninput="clampSubRange({{ slot.id }})"
-                               class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
+                        <select name="proposed_end" id="end-{{ slot.id }}"
+                                onchange="clampSubRange({{ slot.id }})"
+                                class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white"></select>
                     </div>
                 </div>
+                <script>
+                buildTimeSelect('start-{{ slot.id }}','{{ slot.start_time[11:16] }}','{{ slot.end_time[11:16] }}','{{ slot.start_time[11:16] }}');
+                buildTimeSelect('end-{{ slot.id }}','{{ slot.start_time[11:16] }}','{{ slot.end_time[11:16] }}','{{ slot.end_time[11:16] }}');
+                clampSubRange({{ slot.id }});
+                </script>
                 <p id="time-error-{{ slot.id }}" class="hidden text-xs text-red-500">Pick a valid window within {{ format_time(slot.start_time) }} – {{ format_time(slot.end_time) }}.</p>
                 <select name="label" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
-                    <option value="">Just a date</option>
+                    <option value="">Just a date 🌹</option>
                     <option value="dinner">🍽️ Dinner</option>
                     <option value="drinks">🍸 Drinks</option>
                     <option value="coffee">☕ Coffee</option>
+                    <option value="brunch">🥂 Brunch</option>
+                    <option value="lunch">🥗 Lunch</option>
+                    <option value="dessert">🍰 Dessert</option>
+                    <option value="walk">🚶 Walk</option>
+                    <option value="hike">🥾 Hike</option>
+                    <option value="movie">🎬 Movie</option>
+                    <option value="picnic">🧺 Picnic</option>
+                    <option value="cooking">👨‍🍳 Cook together</option>
+                    <option value="bowling">🎳 Bowling</option>
+                    <option value="adventure">🎯 Adventure</option>
                 </select>
                 <input type="text" name="location" placeholder="Location (optional)" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
                 <input type="text" name="date_name" required maxlength="40" placeholder="Your name" class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">

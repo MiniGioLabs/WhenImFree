@@ -134,9 +134,17 @@ async def _restore_cancelled_booking(db, user_id: int, start: str, end: str) -> 
     from ..auth import generate_token
 
     rows = await db.execute(
-        "SELECT * FROM availability_slots WHERE user_id=? AND end_time>=? AND start_time<=?",
+        """SELECT s.* FROM availability_slots s
+           WHERE s.user_id=? AND s.end_time>=? AND s.start_time<=?
+           AND NOT EXISTS (SELECT 1 FROM date_requests r WHERE r.slot_id=s.id)""",
         (user_id, start, end))
     overlapping = [dict(r) for r in await rows.fetchall()]
+
+    # If the freed slot's range isn't covered by any slot in the free list, another
+    # pending request still holds that slot — it's already represented, skip restore.
+    # Truncate to minute precision to tolerate ":00" seconds suffix mismatches.
+    if not any(s["start_time"][:16] <= start[:16] and s["end_time"][:16] >= end[:16] for s in overlapping):
+        return
 
     merged_start = min([start] + [s["start_time"] for s in overlapping])
     merged_end = max([end] + [s["end_time"] for s in overlapping])
