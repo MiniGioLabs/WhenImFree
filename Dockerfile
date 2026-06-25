@@ -15,6 +15,7 @@ RUN uv sync --frozen --no-dev
 COPY src/ ./src/
 
 # Non-root user
+ENV UV_CACHE_DIR=/tmp/uv-cache
 RUN useradd -r -s /bin/false appuser && chown -R appuser /app
 USER appuser
 
