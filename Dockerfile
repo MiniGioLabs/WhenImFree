@@ -5,14 +5,17 @@ WORKDIR /app
 # Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Copy dependency files first for layer caching
+# Copy dependency files for layer caching
 COPY pyproject.toml uv.lock ./
 
 # Install dependencies (no dev extras, frozen)
 RUN uv sync --frozen --no-dev
 
-# Copy source
+# Copy source AFTER deps so local package gets installed on next step
 COPY src/ ./src/
+
+# Re-sync to install the local package
+RUN uv sync --frozen --no-dev
 
 # Non-root user
 ENV UV_CACHE_DIR=/tmp/uv-cache
