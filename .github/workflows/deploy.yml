@@ -19,7 +19,12 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy to Lightsail
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t calendate:latest .
+
+      - name: Ship image to Lightsail
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.LIGHTSAIL_HOST }}
