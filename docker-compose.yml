@@ -1,0 +1,15 @@
+services:
+  calendate:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - BASE_URL=${BASE_URL:-http://localhost:8000}
+      - DATABASE_PATH=/data/calendate.db
+    volumes:
+      - calendate_data:/data
+
+volumes:
+  calendate_data:
