@@ -92,6 +92,13 @@ async def init_db() -> None:
         if "decline_reason" not in req_cols:
             await db.execute("ALTER TABLE date_requests ADD COLUMN decline_reason TEXT")
 
+        await db.executescript("""
+            CREATE INDEX IF NOT EXISTS idx_slots_user_id ON availability_slots(user_id);
+            CREATE INDEX IF NOT EXISTS idx_requests_slot_id ON date_requests(slot_id);
+            CREATE INDEX IF NOT EXISTS idx_requests_status ON date_requests(status);
+            CREATE INDEX IF NOT EXISTS idx_requests_slot_status ON date_requests(slot_id, status);
+        """)
+
         await db.commit()
         logger.info("Database initialized")
     finally:
