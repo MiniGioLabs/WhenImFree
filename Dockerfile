@@ -2,8 +2,9 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install uv via pip (no GHCR pull needed)
-RUN pip install uv
+# Download uv binary directly (no pip install)
+ADD https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-gnu.tar.gz /tmp/uv.tar.gz
+RUN tar -xzf /tmp/uv.tar.gz -C /usr/local/bin --strip-components=1 && rm /tmp/uv.tar.gz
 
 # Install deps
 COPY pyproject.toml uv.lock ./
