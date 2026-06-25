@@ -2,14 +2,14 @@
 
 import logging
 import stripe
-from fastapi import APIRouter, Request, HTTPException
+from fastapi import APIRouter, Form, Request, HTTPException
 from fastapi.responses import HTMLResponse
 
 from ..auth import generate_token, get_current_user
 from ..config import settings
 from ..db import get_db
 from ..utils import render, templates, send_sms
-from ..services.calendar import _split_slot_around_booking, _merge_adjacent_slots
+from ..services.calendar import _split_slot_around_booking, _restore_cancelled_booking
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -88,15 +88,18 @@ async def approve_request(request: Request, request_id: int):
 
 
 @router.post("/requests/{request_id}/deny")
-async def deny_request(request: Request, request_id: int):
+async def deny_request(request: Request, request_id: int, decline_reason: str = Form("")):
     user = await get_current_user(request)
     if not user: raise HTTPException(status_code=401)
+    decline_reason = decline_reason.strip()[:280]
     db = await get_db()
     try:
         req = await (await db.execute(
             "SELECT r.* FROM date_requests r JOIN availability_slots a ON r.slot_id=a.id WHERE r.id=? AND a.user_id=?", (request_id, user["id"]))).fetchone()
         if not req: return HTMLResponse("Not found", status_code=404)
-        await db.execute("DELETE FROM date_requests WHERE id=?", (request_id,))
+        await db.execute(
+            "UPDATE date_requests SET status='declined', decline_reason=? WHERE id=?",
+            (decline_reason or None, request_id))
         await db.commit()
     finally:
         await db.close()
@@ -109,6 +112,12 @@ async def deny_request(request: Request, request_id: int):
             stripe.Refund.create(payment_intent=pi.id)
         except Exception as e:
             logger.error("Refund failed: %s", e)
+
+    if req_dict.get("date_phone"):
+        msg = "Sorry, your date request was declined."
+        if decline_reason:
+            msg += f' Reason: "{decline_reason}"'
+        await send_sms(req_dict["date_phone"], msg)
 
     if request.headers.get("HX-Request"):
         return await _dashboard_response(request, user)
@@ -125,16 +134,15 @@ async def cancel_request(request: Request, request_id: int):
 
         prop_start = req["proposed_start"] or req["start_time"]
         prop_end = req["proposed_end"] or req["end_time"]
-        date_str = prop_start[:10]
 
-        # Restore time as open slot
-        token = generate_token()
-        await db.execute(
-            "INSERT INTO availability_slots (user_id, token, start_time, end_time, deposit_cents) VALUES (?,?,?,?,0)",
-            (req["user_id"], token, prop_start, prop_end))
-        await _merge_adjacent_slots(db, req["user_id"], date_str)
-
-        await db.execute("DELETE FROM date_requests WHERE id=?", (request_id,))
+        try:
+            # Delete the request first: it's the FK owner of slot_id, and
+            # _restore_cancelled_booking may delete that exact slot row while merging.
+            await db.execute("DELETE FROM date_requests WHERE id=?", (request_id,))
+            await _restore_cancelled_booking(db, req["user_id"], prop_start, prop_end)
+        except Exception:
+            await db.rollback()
+            raise
         await db.commit()
     finally:
         await db.close()

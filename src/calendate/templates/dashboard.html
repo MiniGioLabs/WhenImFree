@@ -39,6 +39,32 @@
     <div class="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-sm p-5"><div id="request-detail"></div></div>
 </div>
 
+<!-- Day slots modal (full list, for days with more than 2 slots) -->
+<div id="day-slots-modal" class="hidden fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-sm p-5">
+        <div class="flex justify-between items-center mb-3">
+            <h3 class="text-base font-bold" id="day-slots-title"></h3>
+            <button onclick="document.getElementById('day-slots-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-600">&times;</button>
+        </div>
+        <div id="day-slots-list" class="space-y-1.5"></div>
+    </div>
+</div>
+
+<!-- Cancel + refund confirm modal -->
+<div id="cancel-confirm-modal" class="hidden fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50" onclick="if(event.target===this)this.classList.add('hidden')">
+    <div class="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-sm p-5 text-center">
+        <div class="text-4xl mb-2">💸</div>
+        <h3 class="text-base font-bold mb-1">Hold up — there's money on the table</h3>
+        <p class="text-sm text-gray-500 mb-5">This date has a <span id="cancel-confirm-amount" class="font-semibold text-gray-700"></span> earnest deposit riding on it. Cancelling sends that straight back to your date. No hard feelings, just makin' sure. 🫡</p>
+        <div class="flex gap-2">
+            <button type="button" onclick="document.getElementById('cancel-confirm-modal').classList.add('hidden')"
+                    class="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-200">Never mind</button>
+            <button type="button" id="cancel-confirm-btn"
+                    class="flex-1 bg-red-500 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-red-600">Cancel & refund</button>
+        </div>
+    </div>
+</div>
+
 <!-- Slot modal -->
 <div id="custom-modal" class="hidden fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50" onclick="if(event.target===this)this.classList.add('hidden')">
     <div class="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-sm p-5 max-h-[90vh] overflow-y-auto">
@@ -263,15 +289,63 @@ function openDayModal(dateStr) {
     if(cal){document.getElementById('cal-month').value=cal.dataset.month;document.getElementById('cal-year').value=cal.dataset.year}
     document.getElementById('custom-modal').classList.remove('hidden')
 }
+function fmtSlotTime(iso) {
+    var t = iso.slice(11, 16);
+    var p = t.split(':');
+    var h = parseInt(p[0], 10);
+    var ampm = h >= 12 ? 'pm' : 'am';
+    var h12 = h % 12 || 12;
+    return h12 + (p[1] !== '00' ? ':' + p[1] : '') + ampm;
+}
+function showDaySlots(dateStr) {
+    var el = document.querySelector('.day-slots-data[data-date="' + dateStr + '"]');
+    if (!el) return;
+    var slots = JSON.parse(el.dataset.slots);
+    var list = document.getElementById('day-slots-list');
+    list.innerHTML = '';
+    slots.forEach(function(s) {
+        var booked = s.status === 'booked';
+        var row = document.createElement('div');
+        row.className = 'flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer hover:opacity-80 ' + (booked ? 'bg-red-50' : 'bg-green-50');
+        var dot = document.createElement('span');
+        dot.className = 'inline-block w-2 h-2 rounded-full shrink-0 ' + (booked ? 'bg-red-400' : 'bg-green-400');
+        var label = document.createElement('span');
+        label.className = 'text-sm';
+        label.textContent = fmtSlotTime(s.start_time) + ' – ' + fmtSlotTime(s.end_time);
+        row.appendChild(dot);
+        row.appendChild(label);
+        row.onclick = function() {
+            document.getElementById('day-slots-modal').classList.add('hidden');
+            if (s.request_id) { showRequestModal(s.request_id); }
+            else { editSlot(s.id, s.start_time, s.end_time); }
+        };
+        list.appendChild(row);
+    });
+    document.getElementById('day-slots-title').textContent = dateStr;
+    document.getElementById('day-slots-modal').classList.remove('hidden');
+}
 function showRequestModal(reqId) {
     document.getElementById('request-modal').classList.remove('hidden');
     document.getElementById('request-detail').innerHTML='<p class=\"text-sm text-gray-400 text-center py-4\">Loading…</p>';
     htmx.ajax('GET','/requests/'+reqId+'/detail','#request-detail')
 }
+function confirmCancelWithDeposit(reqId, amount) {
+    document.getElementById('request-modal').classList.add('hidden');
+    document.getElementById('cancel-confirm-amount').textContent = '$' + amount;
+    document.getElementById('cancel-confirm-btn').onclick = function() {
+        document.getElementById('cancel-confirm-modal').classList.add('hidden');
+        htmx.ajax('POST', '/requests/' + reqId + '/cancel', {target: '#dashboard-body', swap: 'outerHTML show:top'});
+    };
+    document.getElementById('cancel-confirm-modal').classList.remove('hidden');
+}
 document.body.addEventListener('closeModal',function(){
     document.getElementById('request-modal').classList.add('hidden');
     var c=document.getElementById('custom-modal');
     if(c)c.classList.add('hidden')
+    var d=document.getElementById('day-slots-modal');
+    if(d)d.classList.add('hidden')
+    var x=document.getElementById('cancel-confirm-modal');
+    if(x)x.classList.add('hidden')
 });
 document.body.addEventListener('modalError',function(){window._modalError=true});
 </script>

@@ -23,4 +23,16 @@
     <!-- Day detail -->
     <div id="day-slots"></div>
 </div>
+<script>
+function clampSubRange(slotId) {
+    var s = document.getElementById('start-' + slotId);
+    var e = document.getElementById('end-' + slotId);
+    var err = document.getElementById('time-error-' + slotId);
+    var btn = document.getElementById('submit-' + slotId);
+    if (!s || !e) return;
+    var valid = !!s.value && !!e.value && e.value > s.value && s.value >= s.min && e.value <= e.max;
+    if (err) err.classList.toggle('hidden', valid);
+    if (btn) btn.disabled = !valid;
+}
+</script>
 {% endblock %}

@@ -54,9 +54,11 @@
                 {% endif %}
                 {% endfor %}
                 {% if day.slots|length > 2 %}
-                <div class="text-[8px] text-gray-300">+{{ day.slots|length-2 }}</div>
+                <div class="text-[8px] text-gray-300 cursor-pointer hover:text-gray-500 underline"
+                     onclick="event.stopPropagation();showDaySlots('{{ day.date_str }}')">+{{ day.slots|length-2 }}</div>
                 {% endif %}
             </div>
+            <div class="hidden day-slots-data" data-date="{{ day.date_str }}" data-slots='{{ day.slots|tojson }}'></div>
         </div>
         {% endif %}
         {% endfor %}

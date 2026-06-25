@@ -147,15 +147,22 @@ async def reserve_slot(request: Request, token: str,
         prop_end = f"{slot_date}T{proposed_end}" if proposed_end else None
 
         if prop_start and prop_end:
+            if prop_end <= prop_start:
+                return HTMLResponse('<p class="text-sm text-red-500">End time must be after start time.</p>')
+            if prop_start < slot["start_time"] or prop_end > slot["end_time"]:
+                return HTMLResponse('<p class="text-sm text-red-500">Selected time must be within the available window.</p>')
             overlap = await db.execute(
                 "SELECT id FROM date_requests WHERE slot_id=? AND status='approved' AND proposed_start IS NOT NULL AND proposed_start<? AND proposed_end>?",
                 (slot_id, prop_end, prop_start))
             if await overlap.fetchone():
                 return HTMLResponse('<p class="text-sm text-red-500">That time is already booked.</p>')
 
+        host = await (await db.execute("SELECT deposit_cents FROM users WHERE id=?", (slot["user_id"],))).fetchone()
+        deposit_cents = (host["deposit_cents"] if host else 0) or 0
+
         await db.execute(
-            "INSERT INTO date_requests (slot_id, date_name, date_phone, status, proposed_start, proposed_end, location, label) VALUES (?,?,?,?,?,?,?,?)",
-            (slot_id, date_name, date_phone, "pending", prop_start, prop_end, location, label))
+            "INSERT INTO date_requests (slot_id, date_name, date_phone, status, proposed_start, proposed_end, location, label, deposit_cents) VALUES (?,?,?,?,?,?,?,?,?)",
+            (slot_id, date_name, date_phone, "pending", prop_start, prop_end, location, label, deposit_cents))
         await db.commit()
     finally:
         await db.close()

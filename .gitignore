@@ -12,6 +12,12 @@ wheels/
 # IDE
 .idea/
 
+# macOS
+.DS_Store
+
+# Test cache
+.pytest_cache/
+
 # Local database
 calendate.db
 calendate.db-shm

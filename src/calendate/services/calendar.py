@@ -7,7 +7,6 @@ def _build_calendar(year: int, month: int, slots: list, booked: list, approved_r
 
     today = date.today()
     cal = cal_mod.Calendar(cal_mod.SUNDAY)
-    booked_dates = set(booked)
 
     slot_request_map = {}
     if approved_requests:
@@ -30,11 +29,11 @@ def _build_calendar(year: int, month: int, slots: list, booked: list, approved_r
                 day_slots = by_date.get(ds, [])
                 slot_list = []
                 for s in day_slots:
-                    status = "booked" if s["start_time"][:10] in booked_dates else "open"
+                    request_id = slot_request_map.get(s["id"])
                     slot_list.append({
                         "id": s["id"], "start_time": s["start_time"], "end_time": s["end_time"],
-                        "status": status,
-                        "request_id": slot_request_map.get(s["id"]) if status == "booked" else None,
+                        "status": "booked" if request_id else "open",
+                        "request_id": request_id,
                     })
                 week_days.append({"day": day_num, "date_str": ds, "slots": slot_list,
                                   "is_today": ds == today.isoformat(), "is_other_month": False})
@@ -119,21 +118,32 @@ async def _split_slot_around_booking(db, slot_id: int, booked_start: str, booked
             "INSERT INTO availability_slots (user_id, token, start_time, end_time, deposit_cents) VALUES (?,?,?,?,0)",
             (slot["user_id"], generate_token(), booked_end, slot["end_time"]))
 
+    # Shrink the original slot to exactly the booked window so its leftover time isn't
+    # double-counted alongside the new fragment rows above (date_requests.slot_id keeps
+    # pointing at this row, so it can't simply be deleted).
+    await db.execute(
+        "UPDATE availability_slots SET start_time=?, end_time=? WHERE id=?",
+        (booked_start, booked_end, slot_id))
 
-async def _merge_adjacent_slots(db, user_id: int, date_str: str) -> None:
+
+async def _restore_cancelled_booking(db, user_id: int, start: str, end: str) -> None:
+    """Reopen a cancelled booking's time range as availability for this host, merging it
+    with any availability slots that are adjacent to or overlap that range so we don't
+    leave duplicate or overlapping rows behind.
+    """
+    from ..auth import generate_token
+
     rows = await db.execute(
-        "SELECT * FROM availability_slots WHERE user_id=? AND date(start_time)=? ORDER BY start_time",
-        (user_id, date_str))
-    slots = [dict(r) for r in await rows.fetchall()]
-    if len(slots) < 2: return
+        "SELECT * FROM availability_slots WHERE user_id=? AND end_time>=? AND start_time<=?",
+        (user_id, start, end))
+    overlapping = [dict(r) for r in await rows.fetchall()]
 
-    merged = [slots[0]]
-    for s in slots[1:]:
-        last = merged[-1]
-        if s["start_time"] <= last["end_time"]:
-            if s["end_time"] > last["end_time"]:
-                await db.execute("UPDATE availability_slots SET end_time=? WHERE id=?", (s["end_time"], last["id"]))
-                last["end_time"] = s["end_time"]
-            await db.execute("DELETE FROM availability_slots WHERE id=?", (s["id"],))
-        else:
-            merged.append(s)
+    merged_start = min([start] + [s["start_time"] for s in overlapping])
+    merged_end = max([end] + [s["end_time"] for s in overlapping])
+
+    for s in overlapping:
+        await db.execute("DELETE FROM availability_slots WHERE id=?", (s["id"],))
+
+    await db.execute(
+        "INSERT INTO availability_slots (user_id, token, start_time, end_time, deposit_cents) VALUES (?,?,?,?,0)",
+        (user_id, generate_token(), merged_start, merged_end))

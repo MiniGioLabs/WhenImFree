@@ -62,6 +62,11 @@ def format_time(iso: str) -> str:
         return iso[11:16]
 
 
+def sort_by_start(reqs: list[dict]) -> list[dict]:
+    """Chronological order by the actual booked window (proposed_start if a sub-range was requested)."""
+    return sorted(reqs, key=lambda r: r.get("proposed_start") or r.get("start_time") or "")
+
+
 # ── Templates ──────────────────────────────────────────────────────
 
 _tdir = Path(settings.TEMPLATES_DIR) if settings.TEMPLATES_DIR else Path(__file__).parent / "templates"
@@ -70,6 +75,7 @@ static_dir = Path(settings.STATIC_DIR) if settings.STATIC_DIR else Path(__file__
 templates.env.globals["format_slot_time"] = format_slot_time
 templates.env.globals["format_slot_day"] = format_slot_day
 templates.env.globals["format_time"] = format_time
+templates.env.filters["sort_by_start"] = sort_by_start
 
 
 def render(request: Request, template: str, **kwargs) -> HTMLResponse:

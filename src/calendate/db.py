@@ -67,6 +67,8 @@ async def init_db() -> None:
                 share_token TEXT UNIQUE,
                 stripe_session_id TEXT,
                 deposit_paid_cents INTEGER DEFAULT 0,
+                deposit_cents INTEGER DEFAULT 0,
+                decline_reason TEXT,
                 created_at TEXT DEFAULT (datetime('now'))
             );
 
@@ -83,6 +85,12 @@ async def init_db() -> None:
             await db.execute("ALTER TABLE users ADD COLUMN avatar_url TEXT")
         if "deposit_cents" not in cols:
             await db.execute("ALTER TABLE users ADD COLUMN deposit_cents INTEGER DEFAULT 0")
+
+        req_cols = [r["name"] for r in await (await db.execute("PRAGMA table_info(date_requests)")).fetchall()]
+        if "deposit_cents" not in req_cols:
+            await db.execute("ALTER TABLE date_requests ADD COLUMN deposit_cents INTEGER DEFAULT 0")
+        if "decline_reason" not in req_cols:
+            await db.execute("ALTER TABLE date_requests ADD COLUMN decline_reason TEXT")
 
         await db.commit()
         logger.info("Database initialized")
