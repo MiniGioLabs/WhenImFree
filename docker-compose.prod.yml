@@ -1,6 +1,6 @@
 services:
   calendate:
-    image: ghcr.io/minigiolabs/calendate:latest
+    build: .
     restart: unless-stopped
     ports:
       - "8000:8000"
