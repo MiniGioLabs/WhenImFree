@@ -53,14 +53,14 @@
 <!-- Cancel + refund confirm modal -->
 <div id="cancel-confirm-modal" class="hidden fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50" onclick="if(event.target===this)this.classList.add('hidden')">
     <div class="bg-white rounded-t-2xl sm:rounded-2xl w-full max-w-sm p-5 text-center">
-        <div class="text-4xl mb-2">💸</div>
-        <h3 class="text-base font-bold mb-1">Hold up — there's money on the table</h3>
-        <p class="text-sm text-gray-500 mb-5">This date has a <span id="cancel-confirm-amount" class="font-semibold text-gray-700"></span> earnest deposit riding on it. Cancelling sends that straight back to your date. No hard feelings, just makin' sure. 🫡</p>
+        <div id="cancel-confirm-icon" class="text-4xl mb-2"></div>
+        <h3 id="cancel-confirm-title" class="text-base font-bold mb-1"></h3>
+        <p id="cancel-confirm-body" class="text-sm text-gray-500 mb-5"></p>
         <div class="flex gap-2">
             <button type="button" onclick="document.getElementById('cancel-confirm-modal').classList.add('hidden')"
                     class="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-200">Never mind</button>
             <button type="button" id="cancel-confirm-btn"
-                    class="flex-1 bg-red-500 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-red-600">Cancel & refund</button>
+                    class="flex-1 bg-red-500 text-white py-2.5 rounded-xl text-sm font-medium hover:bg-red-600"></button>
         </div>
     </div>
 </div>
@@ -89,21 +89,20 @@
         <details class="mb-1">
             <summary class="text-xs text-gray-400 cursor-pointer mb-2 select-none">+ custom time</summary>
             <div class="space-y-3 pt-1">
-                <label class="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" id="all-day-toggle"
-                           onchange="var f=document.getElementById('time-fields');var s=document.getElementById('slot-start');var e=document.getElementById('slot-end');if(this.checked){f.style.opacity='0.4';f.style.pointerEvents='none';var d=(s.value||today).slice(0,10);s.value=d+'T00:00';e.value=d+'T23:59'}else{f.style.opacity='1';f.style.pointerEvents='auto'}">
-                    <span class="text-sm">All day</span>
-                </label>
-                <div id="time-fields" class="grid grid-cols-2 gap-3">
+                <div id="time-fields" class="space-y-3">
                     <div>
                         <label class="block text-sm font-medium mb-1">Start</label>
-                        <input type="datetime-local" id="slot-start"
-                               onchange="autoEnd(this)" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand outline-none">
+                        <div class="flex gap-2">
+                            <input type="date" id="slot-start-date" class="flex-1 min-w-0 px-2 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand outline-none">
+                            <select id="slot-start-time" onchange="autoEnd()" class="flex-1 min-w-0 px-2 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand outline-none bg-white"></select>
+                        </div>
                     </div>
                     <div>
                         <label class="block text-sm font-medium mb-1">End</label>
-                        <input type="datetime-local" id="slot-end"
-                               class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand outline-none">
+                        <div class="flex gap-2">
+                            <input type="date" id="slot-end-date" class="flex-1 min-w-0 px-2 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand outline-none">
+                            <select id="slot-end-time" class="flex-1 min-w-0 px-2 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand outline-none bg-white"></select>
+                        </div>
                     </div>
                 </div>
                 <button type="button" onclick="addCustomBlock()"
@@ -132,11 +131,19 @@
         <form id="edit-form" method="POST" class="space-y-3">
             <div>
                 <label class="block text-xs font-medium mb-1">Start</label>
-                <input type="datetime-local" name="start_time" id="edit-start" required class="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm">
+                <div class="flex gap-2">
+                    <input type="date" id="edit-start-date" required class="flex-1 min-w-0 px-2 py-2.5 border border-gray-200 rounded-lg text-sm">
+                    <select id="edit-start-time" class="flex-1 min-w-0 px-2 py-2.5 border border-gray-200 rounded-lg text-sm bg-white"></select>
+                </div>
+                <input type="hidden" name="start_time" id="edit-start">
             </div>
             <div>
                 <label class="block text-xs font-medium mb-1">End</label>
-                <input type="datetime-local" name="end_time" id="edit-end" required class="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm">
+                <div class="flex gap-2">
+                    <input type="date" id="edit-end-date" required class="flex-1 min-w-0 px-2 py-2.5 border border-gray-200 rounded-lg text-sm">
+                    <select id="edit-end-time" class="flex-1 min-w-0 px-2 py-2.5 border border-gray-200 rounded-lg text-sm bg-white"></select>
+                </div>
+                <input type="hidden" name="end_time" id="edit-end">
             </div>
             <div class="flex gap-2">
                 <button type="button" onclick="document.getElementById('edit-modal').classList.add('hidden')" class="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg text-sm">Cancel</button>
@@ -157,24 +164,32 @@ function copyBookingLink() {
 }
 function editSlot(id,start,end) {
     document.getElementById('edit-form').action='/slots/'+id+'/edit';
-    document.getElementById('edit-start').value=start;
-    document.getElementById('edit-end').value=end;
+    document.getElementById('edit-start-date').value=start.slice(0,10);
+    document.getElementById('edit-start-time').value=start.slice(11,16);
+    document.getElementById('edit-end-date').value=end.slice(0,10);
+    document.getElementById('edit-end-time').value=end.slice(11,16);
     document.getElementById('edit-modal').dataset.slotId=id;
     document.getElementById('edit-modal').classList.remove('hidden')
 }
+document.getElementById('edit-form').addEventListener('submit',function(){
+    document.getElementById('edit-start').value=document.getElementById('edit-start-date').value+'T'+document.getElementById('edit-start-time').value;
+    document.getElementById('edit-end').value=document.getElementById('edit-end-date').value+'T'+document.getElementById('edit-end-time').value;
+});
 function deleteSlot() {
     var id=document.getElementById('edit-modal').dataset.slotId;
     if(!id)return;
     document.getElementById('edit-modal').classList.add('hidden');
     htmx.ajax('DELETE','/slots/'+id,{target:'#dashboard-body',swap:'outerHTML'})
 }
-function autoEnd(input) {
-    var s=input.value;
-    if(s){
-        var p=s.split(/[-T:]/);
+function autoEnd() {
+    var sd=document.getElementById('slot-start-date').value;
+    var st=document.getElementById('slot-start-time').value;
+    if(sd&&st){
+        var p=(sd+'T'+st).split(/[-T:]/);
         var d=new Date(p[0],p[1]-1,p[2],p[3],p[4]);
         d.setHours(d.getHours()+4);
-        document.getElementById('slot-end').value=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')+'T'+String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0')
+        document.getElementById('slot-end-date').value=d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
+        document.getElementById('slot-end-time').value=pad2(d.getHours())+':'+pad2(d.getMinutes());
     }
 }
 var now=new Date();
@@ -237,8 +252,12 @@ function toggleSuggestion(key) {
     renderPending();
 }
 function addCustomBlock() {
-    var s=document.getElementById('slot-start').value;
-    var e=document.getElementById('slot-end').value;
+    var sd=document.getElementById('slot-start-date').value;
+    var st=document.getElementById('slot-start-time').value;
+    var ed=document.getElementById('slot-end-date').value;
+    var et=document.getElementById('slot-end-time').value;
+    var s=sd&&st?sd+'T'+st:'';
+    var e=ed&&et?ed+'T'+et:'';
     var err=document.getElementById('modal-error');
     if(!s||!e){err.innerHTML='<div class="bg-red-50 text-red-600 text-sm px-4 py-3 rounded-xl mt-2">Pick a start and end time.</div>';return}
     if(e<=s){err.innerHTML='<div class="bg-red-50 text-red-600 text-sm px-4 py-3 rounded-xl mt-2">End time must be after start.</div>';return}
@@ -277,11 +296,9 @@ function renderPending() {
 }
 function openDayModal(dateStr) {
     document.getElementById('modal-error').innerHTML='';
-    document.getElementById('all-day-toggle').checked=false;
-    var f=document.getElementById('time-fields');
-    f.style.opacity='1';f.style.pointerEvents='auto';
-    document.getElementById('slot-start').value=dateStr+'T19:00';
-    autoEnd(document.getElementById('slot-start'));
+    document.getElementById('slot-start-date').value=dateStr;
+    document.getElementById('slot-start-time').value='19:00';
+    autoEnd();
     document.querySelectorAll('.suggestion-chip').forEach(function(btn){btn.classList.remove('chip-active','bg-brand','text-white','border-brand');btn.classList.add('border-gray-200','text-gray-600')});
     pendingBlocks=[];
     renderPending();
@@ -329,15 +346,55 @@ function showRequestModal(reqId) {
     document.getElementById('request-detail').innerHTML='<p class=\"text-sm text-gray-400 text-center py-4\">Loading…</p>';
     htmx.ajax('GET','/requests/'+reqId+'/detail','#request-detail')
 }
+function _doCancel(reqId) {
+    fetch('/requests/' + reqId + '/cancel', {method:'POST', headers:{'HX-Request':'true'}})
+        .then(function(r){return r.text()})
+        .then(function(html){
+            document.getElementById('dashboard-body').outerHTML = html;
+            htmx.process(document.getElementById('dashboard-body'));
+        });
+}
 function confirmCancelWithDeposit(reqId, amount) {
+    document.getElementById('cancel-confirm-icon').textContent = '💸';
+    document.getElementById('cancel-confirm-title').textContent = 'Hold up — there\'s money on the table';
+    document.getElementById('cancel-confirm-body').innerHTML = 'This date has a <span class="font-semibold text-gray-700">$' + amount + '</span> earnest deposit riding on it. Cancelling sends that straight back to your date. No hard feelings, just makin\' sure. 🫡';
+    document.getElementById('cancel-confirm-btn').textContent = 'Cancel & refund';
     document.getElementById('request-modal').classList.add('hidden');
-    document.getElementById('cancel-confirm-amount').textContent = '$' + amount;
     document.getElementById('cancel-confirm-btn').onclick = function() {
         document.getElementById('cancel-confirm-modal').classList.add('hidden');
-        htmx.ajax('POST', '/requests/' + reqId + '/cancel', {target: '#dashboard-body', swap: 'outerHTML show:top'});
+        _doCancel(reqId);
     };
     document.getElementById('cancel-confirm-modal').classList.remove('hidden');
 }
+function confirmCancel(reqId) {
+    document.getElementById('cancel-confirm-icon').textContent = '🤔';
+    document.getElementById('cancel-confirm-title').textContent = 'Cancel this date?';
+    document.getElementById('cancel-confirm-body').textContent = 'This can\'t be undone. Your date will be notified.';
+    document.getElementById('cancel-confirm-btn').textContent = 'Yes, cancel';
+    document.getElementById('request-modal').classList.add('hidden');
+    document.getElementById('cancel-confirm-btn').onclick = function() {
+        document.getElementById('cancel-confirm-modal').classList.add('hidden');
+        _doCancel(reqId);
+    };
+    document.getElementById('cancel-confirm-modal').classList.remove('hidden');
+}
+function buildDaySelect(id, selected) {
+    var sel = document.getElementById(id);
+    if (!sel) return;
+    var toVal = function(m) { var h=Math.floor(m/60),mn=m%60; return (h<10?'0'+h:h)+':'+(mn<10?'0'+mn:mn); };
+    var toLbl = function(m) { var h=Math.floor(m/60),mn=m%60,ap=h<12?'AM':'PM',h12=h%12||12; return h12+':'+(mn<10?'0'+mn:mn)+' '+ap; };
+    sel.innerHTML = '';
+    for (var m=0; m<1440; m+=15) {
+        var o = document.createElement('option');
+        o.value = toVal(m); o.textContent = toLbl(m);
+        if (o.value === selected) o.selected = true;
+        sel.appendChild(o);
+    }
+}
+buildDaySelect('slot-start-time', '19:00');
+buildDaySelect('slot-end-time', '23:00');
+buildDaySelect('edit-start-time', '19:00');
+buildDaySelect('edit-end-time', '23:00');
 document.body.addEventListener('closeModal',function(){
     document.getElementById('request-modal').classList.add('hidden');
     var c=document.getElementById('custom-modal');

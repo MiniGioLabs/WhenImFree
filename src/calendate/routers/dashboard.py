@@ -1,7 +1,7 @@
 """Dashboard routes."""
 
 from datetime import date
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from ..auth import get_current_user
@@ -13,7 +13,7 @@ router = APIRouter()
 
 
 @router.get("/dashboard", response_class=HTMLResponse)
-async def dashboard(request: Request):
+async def dashboard(request: Request, month: int = Query(None), year: int = Query(None)):
     user = await get_current_user(request)
     if not user:
         return RedirectResponse("/login", status_code=302)
@@ -44,8 +44,8 @@ async def dashboard(request: Request):
         await db.close()
 
     today = date.today()
-    month = int(request.query_params.get("month") or today.month)
-    year = int(request.query_params.get("year") or today.year)
+    month = month or today.month
+    year = year or today.year
     if month < 1: month = 12; year -= 1
     if month > 12: month = 1; year += 1
     cal = _build_calendar(year, month, slots, booked, approved)
@@ -57,7 +57,7 @@ async def dashboard(request: Request):
 
 
 @router.get("/dashboard/calendar", response_class=HTMLResponse)
-async def dashboard_calendar(request: Request):
+async def dashboard_calendar(request: Request, month: int = Query(None), year: int = Query(None)):
     user = await get_current_user(request)
     if not user:
         raise HTTPException(status_code=401)
@@ -79,8 +79,8 @@ async def dashboard_calendar(request: Request):
         await db.close()
 
     today = date.today()
-    month = int(request.query_params.get("month") or today.month)
-    year = int(request.query_params.get("year") or today.year)
+    month = month or today.month
+    year = year or today.year
     if month < 1: month = 12; year -= 1
     if month > 12: month = 1; year += 1
     cal = _build_calendar(year, month, slots, booked, approved)

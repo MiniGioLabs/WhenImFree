@@ -2,7 +2,7 @@
 
 import json
 from datetime import date, datetime
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from ..auth import generate_token, get_current_user

@@ -1,22 +1,23 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install uv for fast Python package management
-RUN pip install --no-cache-dir uv
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Copy dependency files first (layer caching)
-COPY pyproject.toml .
-COPY uv.lock* .
+# Copy dependency files first for layer caching
+COPY pyproject.toml uv.lock ./
 
-# Install deps
+# Install dependencies (no dev extras, frozen)
 RUN uv sync --frozen --no-dev
 
-# Copy application code
+# Copy source
 COPY src/ ./src/
 
-# Expose port
+# Non-root user
+RUN useradd -r -s /bin/false appuser && chown -R appuser /app
+USER appuser
+
 EXPOSE 8000
 
-# Run
 CMD ["uv", "run", "uvicorn", "calendate.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from ..auth import generate_booking_slug, hash_password, normalize_phone, verify_password, get_current_user
 from ..db import get_db
+from ..limiter import limiter
 from ..utils import render
 
 router = APIRouter()
@@ -16,6 +17,7 @@ async def login_page(request: Request):
 
 
 @router.post("/login")
+@limiter.limit("10/minute")
 async def login(request: Request, phone: str = Form(...), password: str = Form(...)):
     phone = normalize_phone(phone)
     db = await get_db()
@@ -36,6 +38,7 @@ async def signup_page(request: Request):
 
 
 @router.post("/signup")
+@limiter.limit("5/minute")
 async def signup(request: Request, phone: str = Form(...), password: str = Form(...), name: str = Form(...)):
     phone = normalize_phone(phone)
     name = name.strip()

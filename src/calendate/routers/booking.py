@@ -1,12 +1,13 @@
 """Public booking page — Cal.com style."""
 
 from datetime import date, datetime
-from fastapi import APIRouter, Form, Request
+from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import HTMLResponse
 
 from ..auth import generate_token, normalize_phone
 from ..config import settings
 from ..db import get_db
+from ..limiter import limiter
 from ..services.calendar import _build_booking_calendar, _free_time_ranges
 from ..utils import render, send_sms
 
@@ -59,7 +60,8 @@ async def booking_page(request: Request, token: str):
 
 
 @router.get("/book/{token}/calendar", response_class=HTMLResponse)
-async def booking_calendar(request: Request, token: str):
+async def booking_calendar(request: Request, token: str,
+                           month: int = Query(None), year: int = Query(None)):
     """Month navigation for the public booking calendar."""
     db = await get_db()
     try:
@@ -78,10 +80,7 @@ async def booking_calendar(request: Request, token: str):
     finally:
         await db.close()
 
-    month = request.query_params.get("month")
-    year = request.query_params.get("year")
-    cal = _build_booking_calendar(slots, booked_by_slot=booked_by_slot,
-                                  year=int(year) if year else None, month=int(month) if month else None)
+    cal = _build_booking_calendar(slots, booked_by_slot=booked_by_slot, year=year, month=month)
     return render(request, "partials/_booking_calendar.html", cal=cal, token=token)
 
 
@@ -121,6 +120,7 @@ async def booking_day(request: Request, token: str):
 
 
 @router.post("/book/{token}/reserve")
+@limiter.limit("5/minute")
 async def reserve_slot(request: Request, token: str,
                        date_name: str = Form(...), date_phone: str = Form(...),
                        slot_id: int = Form(...),

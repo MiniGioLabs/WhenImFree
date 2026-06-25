@@ -20,8 +20,9 @@
         {% elif day.is_open %}
         <button hx-get="/book/{{ token }}/day?date={{ day.date_str }}"
                 hx-target="#day-slots"
+                onclick="selectDay(this)"
                 class="py-2 text-sm font-medium rounded-lg hover:bg-brand hover:text-white transition
-                       {% if day.is_today %}bg-brand text-white{% endif %}">{{ day.day }}</button>
+                       {% if day.is_today %}text-brand font-bold{% endif %}">{{ day.day }}</button>
         {% else %}
         <div class="py-2 text-sm text-gray-300 {% if day.is_today %}font-bold text-gray-400{% endif %}">{{ day.day }}</div>
         {% endif %}

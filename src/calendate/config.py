@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "CalenDate"
     SECRET_KEY: str = "replace-me"
     BASE_URL: str = "http://localhost:8000"
+    HTTPS_ONLY: bool = False
     DATABASE_PATH: str = ""
     TEMPLATES_DIR: str = ""
     STATIC_DIR: str = ""
