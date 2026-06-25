@@ -7,6 +7,7 @@ from fastapi.responses import HTMLResponse
 from ..auth import generate_token, normalize_phone
 from ..config import settings
 from ..db import get_db
+from ..limiter import limiter
 from ..services.calendar import _build_booking_calendar, _free_time_ranges
 from ..utils import render, send_sms
 
@@ -119,6 +120,7 @@ async def booking_day(request: Request, token: str):
 
 
 @router.post("/book/{token}/reserve")
+@limiter.limit("5/minute")
 async def reserve_slot(request: Request, token: str,
                        date_name: str = Form(...), date_phone: str = Form(...),
                        slot_id: int = Form(...),

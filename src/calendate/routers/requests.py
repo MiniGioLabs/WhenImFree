@@ -92,26 +92,38 @@ async def deny_request(request: Request, request_id: int, decline_reason: str = 
     user = await get_current_user(request)
     if not user: raise HTTPException(status_code=401)
     decline_reason = decline_reason.strip()[:280]
+
     db = await get_db()
     try:
         req = await (await db.execute(
             "SELECT r.* FROM date_requests r JOIN availability_slots a ON r.slot_id=a.id WHERE r.id=? AND a.user_id=?", (request_id, user["id"]))).fetchone()
         if not req: return HTMLResponse("Not found", status_code=404)
-        await db.execute(
-            "UPDATE date_requests SET status='declined', decline_reason=? WHERE id=?",
-            (decline_reason or None, request_id))
-        await db.commit()
     finally:
         await db.close()
 
     req_dict = dict(req)
+
+    # Attempt refund first — surface failures to the host before marking as declined.
     if req_dict.get("stripe_session_id") and req_dict.get("deposit_paid_cents", 0) > 0:
         try:
             session = stripe.checkout.Session.retrieve(req_dict["stripe_session_id"])
             pi = stripe.PaymentIntent.retrieve(session.payment_intent)
             stripe.Refund.create(payment_intent=pi.id)
         except Exception as e:
-            logger.error("Refund failed: %s", e)
+            logger.error("Refund failed for request %d: %s", request_id, e)
+            return HTMLResponse(
+                '<p class="text-sm text-red-500 text-center py-2">⚠️ Refund failed — issue it manually in your Stripe dashboard, then deny again.</p>',
+                status_code=200,
+            )
+
+    db = await get_db()
+    try:
+        await db.execute(
+            "UPDATE date_requests SET status='declined', decline_reason=? WHERE id=?",
+            (decline_reason or None, request_id))
+        await db.commit()
+    finally:
+        await db.close()
 
     if req_dict.get("date_phone"):
         msg = "Sorry, your date request was declined."
@@ -131,29 +143,39 @@ async def cancel_request(request: Request, request_id: int):
         req = await (await db.execute(
             "SELECT r.*, a.user_id, a.start_time, a.end_time FROM date_requests r JOIN availability_slots a ON r.slot_id=a.id WHERE r.id=?", (request_id,))).fetchone()
         if not req: return HTMLResponse("Not found", status_code=404)
-
-        prop_start = req["proposed_start"] or req["start_time"]
-        prop_end = req["proposed_end"] or req["end_time"]
-
-        try:
-            await db.execute("DELETE FROM reminders WHERE request_id=?", (request_id,))
-            await db.execute("DELETE FROM date_requests WHERE id=?", (request_id,))
-            await _restore_cancelled_booking(db, req["user_id"], prop_start, prop_end)
-        except Exception:
-            await db.rollback()
-            raise
-        await db.commit()
     finally:
         await db.close()
 
     req_dict = dict(req)
+
+    # Attempt refund first — if it fails, abort and surface the error to the host.
     if req_dict.get("stripe_session_id") and req_dict.get("deposit_paid_cents", 0) > 0:
         try:
             session = stripe.checkout.Session.retrieve(req_dict["stripe_session_id"])
             pi = stripe.PaymentIntent.retrieve(session.payment_intent)
             stripe.Refund.create(payment_intent=pi.id)
         except Exception as e:
-            logger.error("Refund failed: %s", e)
+            logger.error("Refund failed for request %d: %s", request_id, e)
+            return HTMLResponse(
+                '<p class="text-sm text-red-500 text-center py-2">⚠️ Refund failed — issue it manually in your Stripe dashboard, then cancel again.</p>',
+                status_code=200,
+            )
+
+    prop_start = req_dict.get("proposed_start") or req_dict["start_time"]
+    prop_end = req_dict.get("proposed_end") or req_dict["end_time"]
+
+    db = await get_db()
+    try:
+        try:
+            await db.execute("DELETE FROM reminders WHERE request_id=?", (request_id,))
+            await db.execute("DELETE FROM date_requests WHERE id=?", (request_id,))
+            await _restore_cancelled_booking(db, req_dict["user_id"], prop_start, prop_end)
+        except Exception:
+            await db.rollback()
+            raise
+        await db.commit()
+    finally:
+        await db.close()
 
     user = await get_current_user(request)
     if user and request.headers.get("HX-Request"):
