@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 {% block title %}{{ host.name }} — CalenDate{% endblock %}
+{% block og_title %}Book a date with {{ host.name }} — CalenDate{% endblock %}
+{% block og_description %}Pick from {{ host.name }}'s available dates and send a booking request.{% endblock %}
+{% block og_image %}{% if host.avatar_url %}{{ request.base_url }}{{ host.avatar_url.lstrip('/') }}{% else %}{{ request.base_url }}static/og-image.png{% endif %}{% endblock %}
+{% block meta_description %}Pick from {{ host.name }}'s available dates and send a booking request.{% endblock %}
 {% block content %}
 <div class="max-w-lg mx-auto">
     <!-- Host profile -->
