@@ -1,7 +1,7 @@
 """Slot CRUD routes."""
 
 import json
-from datetime import date, datetime
+from datetime import date
 from fastapi import APIRouter, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
@@ -121,7 +121,7 @@ async def edit_slot(request: Request, slot_id: int, start_time: str = Form(...),
 async def _dashboard_response(request, user, month=None, year=None):
     from ..db import get_db
     from ..services.calendar import _build_calendar
-    from datetime import date
+
 
     db = await get_db()
     try:

@@ -1,6 +1,6 @@
 """Public booking page — Cal.com style."""
 
-from datetime import date, datetime
+from datetime import date
 from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import HTMLResponse
 
@@ -113,7 +113,6 @@ async def booking_day(request: Request, token: str):
     finally:
         await db.close()
 
-    from ..utils import render
     return render(request, "partials/_booking_day.html",
                   slots=free_slots, date_str=date_str, token=token,
                   deposit_cents=user.get("deposit_cents", 0))
