@@ -80,3 +80,25 @@ templates.env.filters["sort_by_start"] = sort_by_start
 
 def render(request: Request, template: str, **kwargs) -> HTMLResponse:
     return templates.TemplateResponse(request, template, {"request": request, **kwargs})
+
+
+def upload_to_s3(file_data: bytes, filename: str, content_type: str) -> str:
+    """Upload a file to S3. Returns the public URL, or empty string if not configured."""
+    from .config import settings
+    if not settings.s3_configured:
+        return ""
+    import boto3
+    client = boto3.client(
+        "s3",
+        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+        region_name=settings.AWS_REGION,
+    )
+    client.put_object(
+        Bucket=settings.AWS_S3_BUCKET,
+        Key=f"avatars/{filename}",
+        Body=file_data,
+        ContentType=content_type,
+        ACL="public-read",
+    )
+    return f"https://{settings.AWS_S3_BUCKET}.s3.{settings.AWS_REGION}.amazonaws.com/avatars/{filename}"

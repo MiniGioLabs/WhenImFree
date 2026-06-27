@@ -23,6 +23,14 @@ logger = logging.getLogger(__name__)
 if settings.SECRET_KEY in ("replace-me", "calendate-super-secret-key-2024", ""):
     logger.warning("SECRET_KEY is set to an insecure default — set a random value in .env before deploying")
 
+if settings.POSTHOG_API_KEY:
+    import posthog
+    posthog.api_key = settings.POSTHOG_API_KEY
+    posthog.host = settings.POSTHOG_HOST
+    logger.info("PostHog configured")
+else:
+    posthog = None
+
 if settings.STRIPE_SECRET_KEY:
     stripe.api_key = settings.STRIPE_SECRET_KEY
 
@@ -89,6 +97,18 @@ static_dir.mkdir(exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 @app.middleware("http")
+async def track_pageviews(request: Request, call_next):
+    """Track page views in PostHog (anonymous + logged-in users)."""
+    response = await call_next(request)
+    if settings.posthog_configured:
+        user_id = request.session.get("user_phone", "anonymous")
+        posthog.capture(user_id, "$pageview", {
+            "$current_url": str(request.url),
+            "$pathname": request.url.path,
+        })
+    return response
+
+@app.middleware("http")
 async def catch_exceptions(request: Request, call_next):
     try:
         return await call_next(request)
@@ -114,13 +134,14 @@ async def catch_exceptions(request: Request, call_next):
         )
 
 
-from .routers import auth, dashboard, slots, booking, requests, profile
+from .routers import auth, dashboard, slots, booking, requests, profile, stripe_webhook
 app.include_router(auth.router)
 app.include_router(dashboard.router)
 app.include_router(slots.router)
 app.include_router(booking.router)
 app.include_router(requests.router)
 app.include_router(profile.router)
+app.include_router(stripe_webhook.router)
 
 
 @app.get("/", response_class=HTMLResponse)

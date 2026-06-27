@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from ..auth import get_current_user
 from ..config import settings as app_settings
 from ..db import get_db
-from ..utils import render, static_dir
+from ..utils import render, static_dir, upload_to_s3
 
 router = APIRouter()
 
@@ -38,14 +38,23 @@ async def update_avatar(request: Request, avatar: UploadFile = File(...)):
     if len(data) > MAX_AVATAR_BYTES:
         return render(request, "settings.html", user=user, error="Image must be under 5MB.")
 
-    avatars_dir = static_dir / "avatars"
-    avatars_dir.mkdir(parents=True, exist_ok=True)
-    filename = f"{user['id']}-{uuid.uuid4().hex[:8]}.{ext}"
-    (avatars_dir / filename).write_bytes(data)
+    user_id = user["id"]
+    uid = uuid.uuid4().hex[:8]
+    filename = f"{user_id}-{uid}.{ext}"
+
+    # Try S3 first, fall back to local filesystem
+    s3_url = upload_to_s3(data, filename, avatar.content_type)
+    if s3_url:
+        avatar_url = s3_url
+    else:
+        avatars_dir = static_dir / "avatars"
+        avatars_dir.mkdir(parents=True, exist_ok=True)
+        (avatars_dir / filename).write_bytes(data)
+        avatar_url = f"/static/avatars/{filename}"
 
     db = await get_db()
     try:
-        await db.execute("UPDATE users SET avatar_url=? WHERE id=?", (f"/static/avatars/{filename}", user["id"]))
+        await db.execute("UPDATE users SET avatar_url=? WHERE id=?", (avatar_url, user["id"]))
         await db.commit()
     finally:
         await db.close()

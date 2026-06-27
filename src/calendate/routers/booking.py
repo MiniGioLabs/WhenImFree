@@ -4,7 +4,9 @@ from datetime import date
 from fastapi import APIRouter, Form, Query, Request
 from fastapi.responses import HTMLResponse
 
+import stripe
 from ..auth import generate_token, normalize_phone
+from ..config import settings
 from ..config import settings
 from ..db import get_db
 from ..limiter import limiter
@@ -159,16 +161,33 @@ async def reserve_slot(request: Request, token: str,
         host = await (await db.execute("SELECT deposit_cents FROM users WHERE id=?", (slot["user_id"],))).fetchone()
         deposit_cents = (host["deposit_cents"] if host else 0) or 0
 
-        await db.execute(
+        cur = await db.execute(
             "INSERT INTO date_requests (slot_id, date_name, date_phone, status, proposed_start, proposed_end, location, label, deposit_cents) VALUES (?,?,?,?,?,?,?,?,?)",
             (slot_id, date_name, date_phone, "pending", prop_start, prop_end, location, label, deposit_cents))
+        request_id = cur.lastrowid
         await db.commit()
     finally:
         await db.close()
 
-    return HTMLResponse("""
-    <div class='text-center py-8'>
-        <div class='text-5xl mb-4'>🎉</div>
-        <h2 class='text-xl font-bold mb-2'>Request sent!</h2>
-        <p class='text-gray-500'>You'll get a text when it's confirmed.</p>
-    </div>""")
+    if deposit_cents > 0 and settings.STRIPE_SECRET_KEY:
+        try:
+            session = stripe.checkout.Session.create(
+                payment_method_types=["card"],
+                line_items=[{
+                    "price_data": {
+                        "currency": "usd",
+                        "product_data": {"name": "CalenDate earnest deposit"},
+                        "unit_amount": deposit_cents,
+                    },
+                    "quantity": 1,
+                }],
+                mode="payment",
+                success_url=f"{settings.BASE_URL}/book/success?session_id={{CHECKOUT_SESSION_ID}}",
+                cancel_url=f"{settings.BASE_URL}/book/cancel",
+                client_reference_id=str(request_id),
+            )
+            return HTMLResponse(f'<meta http-equiv="refresh" content="0;url={session.url}"><div class="text-center py-8"><div class="text-5xl mb-4">💳</div><h2 class="text-xl font-bold mb-2">Redirecting to Stripe...</h2><p class="text-gray-500">Complete your deposit to send the request.</p></div>')
+        except Exception:
+            pass
+
+    return HTMLResponse("""<div class='text-center py-8'><div class='text-5xl mb-4'>🎉</div><h2 class='text-xl font-bold mb-2'>Request sent!</h2><p class='text-gray-500'>You'll get a text when it's confirmed.</p></div>""")
