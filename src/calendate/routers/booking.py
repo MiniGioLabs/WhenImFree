@@ -58,7 +58,8 @@ async def booking_page(request: Request, token: str):
         await db.close()
 
     cal = _build_booking_calendar(slots, booked_by_slot=booked_by_slot)
-    return render(request, "booking.html", host=user, slots=slots, cal=cal, token=user["booking_slug"])
+    return render(request, "booking.html", host=user, slots=slots, cal=cal, token=user["booking_slug"],
+                  google_maps_key=settings.GOOGLE_MAPS_API_KEY)
 
 
 @router.get("/book/{token}/calendar", response_class=HTMLResponse)
@@ -115,7 +116,7 @@ async def booking_day(request: Request, token: str):
     finally:
         await db.close()
 
-    has_stripe = bool(user.get("stripe_onboarding_complete")) and bool(settings.STRIPE_SECRET_KEY)
+    has_stripe = bool(user.get("stripe_onboarding_complete"))
     return render(request, "partials/_booking_day.html",
                   slots=free_slots, date_str=date_str, token=token,
                   has_stripe=has_stripe)

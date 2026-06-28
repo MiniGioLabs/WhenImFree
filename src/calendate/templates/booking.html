@@ -27,6 +27,17 @@
     <!-- Day detail -->
     <div id="day-slots"></div>
 </div>
+{% if google_maps_key %}
+<script>window._mapsReady = false; window._mapsReadyCb = [];</script>
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&libraries=places&callback=_onMapsReady" async defer></script>
+<script>
+function _onMapsReady() {
+    window._mapsReady = true;
+    window._mapsReadyCb.forEach(function(fn) { fn(); });
+    window._mapsReadyCb = [];
+}
+</script>
+{% endif %}
 <script>
 function buildTimeSelect(id, minT, maxT, selected) {
     var sel = document.getElementById(id);
@@ -129,8 +140,38 @@ function initBookingPhones() {
         });
     });
 }
+// --- Google Places Autocomplete (no-op if Maps not loaded) ---
+function _attachPlacesAutocomplete(input) {
+    if (input.dataset.acInit) return;
+    input.dataset.acInit = '1';
+    var ac = new google.maps.places.Autocomplete(input, {
+        fields: ['name', 'formatted_address'],
+        types: ['establishment', 'geocode']
+    });
+    ac.addListener('place_changed', function() {
+        var place = ac.getPlace();
+        if (!place || !place.name) return;
+        input.value = place.formatted_address
+            ? place.name + ', ' + place.formatted_address
+            : place.name;
+    });
+}
+function initLocationAutocomplete() {
+    document.querySelectorAll('#day-slots input[name="location"]').forEach(function(input) {
+        if (!input.dataset.acInit) {
+            if (window._mapsReady) {
+                _attachPlacesAutocomplete(input);
+            } else if (window._mapsReadyCb !== undefined) {
+                window._mapsReadyCb.push(function() { _attachPlacesAutocomplete(input); });
+            }
+        }
+    });
+}
 document.body.addEventListener('htmx:afterSwap', function(e) {
-    if (e.detail.target && e.detail.target.id === 'day-slots') initBookingPhones();
+    if (e.detail.target && e.detail.target.id === 'day-slots') {
+        initBookingPhones();
+        initLocationAutocomplete();
+    }
 });
 </script>
 {% endblock %}
