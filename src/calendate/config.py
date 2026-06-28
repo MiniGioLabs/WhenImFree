@@ -25,9 +25,6 @@ class Settings(BaseSettings):
     POSTHOG_API_KEY: str = ""
     POSTHOG_HOST: str = "https://us.posthog.com"
 
-    # Google Maps
-    GOOGLE_MAPS_API_KEY: str = ""
-
     # S3
     AWS_ACCESS_KEY_ID: str = ""
     AWS_SECRET_ACCESS_KEY: str = ""

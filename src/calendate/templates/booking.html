@@ -27,17 +27,6 @@
     <!-- Day detail -->
     <div id="day-slots"></div>
 </div>
-{% if google_maps_key %}
-<script>window._mapsReady = false; window._mapsReadyCb = [];</script>
-<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&loading=async&callback=_onMapsReady" async defer></script>
-<script>
-function _onMapsReady() {
-    window._mapsReady = true;
-    window._mapsReadyCb.forEach(function(fn) { fn(); });
-    window._mapsReadyCb = [];
-}
-</script>
-{% endif %}
 <script>
 function buildTimeSelect(id, minT, maxT, selected) {
     var sel = document.getElementById(id);
@@ -140,80 +129,8 @@ function initBookingPhones() {
         });
     });
 }
-// --- Google Places Autocomplete via new AutocompleteSuggestion API ---
-async function _attachPlacesAutocomplete(input) {
-    if (input.dataset.acInit) return;
-    input.dataset.acInit = '1';
-
-    var placesLib = await google.maps.importLibrary('places');
-    var AutocompleteSuggestion = placesLib.AutocompleteSuggestion;
-    var AutocompleteSessionToken = placesLib.AutocompleteSessionToken;
-
-    var token = new AutocompleteSessionToken();
-    var list = null;
-
-    // Wrap input in a tight relative container so dropdown anchors to it
-    var wrapper = document.createElement('div');
-    wrapper.style.position = 'relative';
-    input.parentNode.insertBefore(wrapper, input);
-    wrapper.appendChild(input);
-
-    function removeList() {
-        if (list) { list.remove(); list = null; }
-    }
-
-    input.addEventListener('input', async function() {
-        var q = this.value.trim();
-        if (q.length < 2) { removeList(); return; }
-        try {
-            var result = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
-                input: q, sessionToken: token
-            });
-            removeList();
-            if (!result.suggestions.length) return;
-
-            list = document.createElement('ul');
-            list.className = 'absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-50 overflow-hidden';
-
-            result.suggestions.slice(0, 5).forEach(function(s) {
-                var full = s.placePrediction.text.toString();
-                var parts = full.split(', ');
-                var main = parts[0];
-                var sub  = parts.slice(1).join(', ');
-                var li = document.createElement('li');
-                li.className = 'px-3 py-2.5 cursor-pointer hover:bg-gray-50 border-b border-gray-100 last:border-0';
-                li.innerHTML = '<p class="text-sm font-medium text-gray-800">' + main + '</p>' +
-                               (sub ? '<p class="text-xs text-gray-400">' + sub + '</p>' : '');
-                li.addEventListener('mousedown', function(e) {
-                    e.preventDefault();
-                    input.value = full;
-                    removeList();
-                    token = new AutocompleteSessionToken();
-                });
-                list.appendChild(li);
-            });
-            wrapper.appendChild(list);
-        } catch(_) { removeList(); }
-    });
-
-    input.addEventListener('blur',    function() { setTimeout(removeList, 200); });
-    input.addEventListener('keydown', function(e) { if (e.key === 'Escape') removeList(); });
-}
-function initLocationAutocomplete() {
-    document.querySelectorAll('#day-slots input[name="location"]').forEach(function(input) {
-        if (input.dataset.acInit) return;
-        if (window._mapsReady) {
-            _attachPlacesAutocomplete(input);
-        } else if (window._mapsReadyCb !== undefined) {
-            window._mapsReadyCb.push(function() { _attachPlacesAutocomplete(input); });
-        }
-    });
-}
 document.body.addEventListener('htmx:afterSwap', function(e) {
-    if (e.detail.target && e.detail.target.id === 'day-slots') {
-        initBookingPhones();
-        initLocationAutocomplete();
-    }
+    if (e.detail.target && e.detail.target.id === 'day-slots') initBookingPhones();
 });
 </script>
 {% endblock %}

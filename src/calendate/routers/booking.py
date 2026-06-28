@@ -58,8 +58,7 @@ async def booking_page(request: Request, token: str):
         await db.close()
 
     cal = _build_booking_calendar(slots, booked_by_slot=booked_by_slot)
-    return render(request, "booking.html", host=user, slots=slots, cal=cal, token=user["booking_slug"],
-                  google_maps_key=settings.GOOGLE_MAPS_API_KEY)
+    return render(request, "booking.html", host=user, slots=slots, cal=cal, token=user["booking_slug"])
 
 
 @router.get("/book/{token}/calendar", response_class=HTMLResponse)
