@@ -51,16 +51,6 @@ function selectDay(btn) {
     btn.setAttribute('data-selected', '1');
     btn.classList.add('bg-brand', 'text-white');
 }
-function selectTip(slotId, amount, btn) {
-    var container = document.getElementById('tip-pills-' + slotId);
-    container.querySelectorAll('.tip-pill').forEach(function(p) {
-        p.classList.remove('selected', 'border-2', 'border-brand', 'bg-brand/10', 'text-brand');
-        p.classList.add('border', 'border-gray-200', 'text-gray-600');
-    });
-    btn.classList.remove('border', 'border-gray-200', 'text-gray-600');
-    btn.classList.add('selected', 'border-2', 'border-brand', 'bg-brand/10', 'text-brand');
-    document.getElementById('tip-dollars-' + slotId).value = amount;
-}
 function clampSubRange(slotId) {
     var s=document.getElementById('start-'+slotId);
     var e=document.getElementById('end-'+slotId);
@@ -71,5 +61,76 @@ function clampSubRange(slotId) {
     if (err) err.classList.toggle('hidden',valid);
     if (btn) btn.disabled=!valid;
 }
+
+// --- Tip selection ---
+function _tipPillReset(slotId) {
+    document.getElementById('tip-pills-' + slotId).querySelectorAll('.tip-pill').forEach(function(p) {
+        p.classList.remove('selected','border-2','border-brand','bg-brand/10','text-brand');
+        p.classList.add('border','border-gray-200','text-gray-600');
+    });
+}
+function selectTip(slotId, amount, btn) {
+    _tipPillReset(slotId);
+    btn.classList.remove('border','border-gray-200','text-gray-600');
+    btn.classList.add('selected','border-2','border-brand','bg-brand/10','text-brand');
+    var custom = document.getElementById('tip-custom-' + slotId);
+    if (custom) custom.classList.add('hidden');
+    document.getElementById('tip-dollars-' + slotId).value = amount;
+    document.getElementById('submit-' + slotId).disabled = false;
+}
+function showCustomTip(slotId, btn) {
+    _tipPillReset(slotId);
+    btn.classList.remove('border','border-gray-200','text-gray-600');
+    btn.classList.add('selected','border-2','border-brand','bg-brand/10','text-brand');
+    var custom = document.getElementById('tip-custom-' + slotId);
+    if (custom) custom.classList.remove('hidden');
+    document.getElementById('tip-dollars-' + slotId).value = 0;
+    document.getElementById('submit-' + slotId).disabled = true;
+    var input = document.getElementById('tip-custom-input-' + slotId);
+    if (input) { input.value = ''; input.focus(); }
+}
+function updateCustomTip(slotId, input) {
+    var val = parseInt(input.value) || 0;
+    var valid = val >= 5 && val <= 10000 && val % 5 === 0;
+    input.classList.toggle('border-red-400', !valid && input.value !== '');
+    input.classList.toggle('border-gray-200', valid || input.value === '');
+    document.getElementById('tip-dollars-' + slotId).value = valid ? val : 0;
+    document.getElementById('submit-' + slotId).disabled = !valid;
+}
+
+// --- Phone formatting (mirrors signup/login) ---
+function formatPhone(digits) {
+    if (digits.length === 0) return '';
+    if (digits.length <= 3) return '(' + digits;
+    if (digits.length <= 6) return '(' + digits.slice(0,3) + ') ' + digits.slice(3);
+    return '(' + digits.slice(0,3) + ') ' + digits.slice(3,6) + '-' + digits.slice(6);
+}
+function initBookingPhones() {
+    document.querySelectorAll('#day-slots input[type="tel"]').forEach(function(input) {
+        if (input.dataset.phoneInit) return;
+        input.dataset.phoneInit = '1';
+        input.addEventListener('keydown', function(e) {
+            var allowed = ['Backspace','Delete','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Tab','Home','End'];
+            if (!allowed.includes(e.key) && !/^\d$/.test(e.key)) e.preventDefault();
+        });
+        input.addEventListener('input', function() {
+            var digits = this.value.replace(/\D/g,'').slice(0,10);
+            this.value = formatPhone(digits);
+        });
+        input.addEventListener('blur', function() {
+            var digits = this.value.replace(/\D/g,'');
+            if (digits.length > 0 && digits.length !== 10) {
+                this.classList.add('border-red-400');
+                this.classList.remove('border-gray-200');
+            } else {
+                this.classList.remove('border-red-400');
+                this.classList.add('border-gray-200');
+            }
+        });
+    });
+}
+document.body.addEventListener('htmx:afterSwap', function(e) {
+    if (e.detail.target && e.detail.target.id === 'day-slots') initBookingPhones();
+});
 </script>
 {% endblock %}
