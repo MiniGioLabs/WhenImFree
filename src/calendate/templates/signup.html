@@ -4,15 +4,98 @@
 <div class="max-w-sm mx-auto">
     <h1 class="text-2xl font-bold mb-6">Create your account</h1>
     {% if error %}<p class="text-red-500 text-sm mb-4">{{ error }}</p>{% endif %}
-    <form method="POST" class="space-y-4">
-        <input type="text" name="name" required maxlength="40" placeholder="Full name" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none">
+    <form method="POST" class="space-y-4" id="signup-form">
+        <input type="text" name="name" required minlength="1" maxlength="40" placeholder="What's your name?"
+               class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none"
+               id="name-input">
         <div>
-            <input type="tel" name="phone" required pattern="[\d\s\(\)\-\.\+]{10,}" placeholder="555-123-4567" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none">
-            <p class="text-xs text-gray-400 mt-1">US numbers only (10 digits)</p>
+            <input type="tel" name="phone" required placeholder="(555) 123-4567" maxlength="14"
+                   class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none"
+                   id="phone-input" inputmode="numeric" autocomplete="tel">
+            <p class="text-xs text-gray-400 mt-1 pl-1">US numbers only (10 digits)</p>
         </div>
-        <input type="password" name="password" required minlength="6" maxlength="128" placeholder="Password (6+ chars)" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none">
+        <div>
+            <input type="password" name="password" required minlength="6" maxlength="20" placeholder="Password"
+                   class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none"
+                   id="password-input">
+            <ul class="text-xs mt-1.5 space-y-0.5 pl-1" id="pw-reqs">
+                <li id="req-length" class="text-gray-400">6–20 characters</li>
+                <li id="req-upper"  class="text-gray-400">At least one uppercase letter</li>
+                <li id="req-lower"  class="text-gray-400">At least one lowercase letter</li>
+                <li id="req-number" class="text-gray-400">At least one number</li>
+            </ul>
+        </div>
         <button type="submit" class="w-full bg-brand text-white py-3 rounded-xl font-medium hover:bg-brand-dark">Sign up</button>
     </form>
     <p class="text-sm text-gray-500 mt-4 text-center">Have an account? <a href="/login" class="text-brand">Log in</a></p>
 </div>
+
+<script>
+function setFieldValid(el, valid) {
+    el.classList.toggle('border-red-400', !valid);
+    el.classList.toggle('focus:ring-red-300', !valid);
+    el.classList.toggle('border-gray-200', valid);
+}
+
+// Phone: format as (407) 322-0000, max 10 digits, digits only
+const phoneInput = document.getElementById('phone-input');
+
+function formatPhone(digits) {
+    if (digits.length === 0) return '';
+    if (digits.length <= 3) return `(${digits}`;
+    if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+function validatePhone() {
+    const digits = phoneInput.value.replace(/\D/g, '');
+    const valid = digits.length === 10;
+    if (phoneInput.value.length > 0) setFieldValid(phoneInput, valid);
+    phoneInput.setCustomValidity(valid || phoneInput.value.length === 0 ? '' : 'Enter a 10-digit US phone number.');
+}
+
+phoneInput.addEventListener('keydown', function(e) {
+    const allowed = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Tab', 'Home', 'End'];
+    if (!allowed.includes(e.key) && !/^\d$/.test(e.key)) e.preventDefault();
+});
+
+phoneInput.addEventListener('input', function() {
+    const digits = this.value.replace(/\D/g, '').slice(0, 10);
+    this.value = formatPhone(digits);
+    validatePhone();
+});
+
+phoneInput.addEventListener('blur', function() {
+    if (this.value.length > 0) validatePhone();
+});
+
+// Password live requirements
+const pwInput = document.getElementById('password-input');
+const pwChecks = {
+    'req-length': v => v.length >= 6 && v.length <= 20,
+    'req-upper':  v => /[A-Z]/.test(v),
+    'req-lower':  v => /[a-z]/.test(v),
+    'req-number': v => /[0-9]/.test(v),
+};
+
+function validatePassword() {
+    const v = pwInput.value;
+    let allMet = true;
+    for (const [id, check] of Object.entries(pwChecks)) {
+        const met = check(v);
+        const el = document.getElementById(id);
+        el.classList.toggle('text-green-500', met && v.length > 0);
+        el.classList.toggle('text-gray-400', !met || v.length === 0);
+        if (!met) allMet = false;
+    }
+    if (v.length > 0) {
+        setFieldValid(pwInput, allMet);
+        pwInput.setCustomValidity(allMet ? '' : 'Password does not meet all requirements.');
+    } else {
+        setFieldValid(pwInput, true);
+        pwInput.setCustomValidity('');
+    }
+}
+pwInput.addEventListener('input', validatePassword);
+</script>
 {% endblock %}

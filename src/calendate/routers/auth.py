@@ -1,5 +1,7 @@
 """Auth routes."""
 
+import re
+
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 
@@ -19,6 +21,8 @@ async def login_page(request: Request):
 @router.post("/login")
 @limiter.limit("10/minute")
 async def login(request: Request, phone: str = Form(...), password: str = Form(...)):
+    if len(password) < 6 or len(password) > 20:
+        return render(request, "login.html", error="Invalid phone or password.")
     phone = normalize_phone(phone)
     db = await get_db()
     try:
@@ -43,14 +47,20 @@ async def signup(request: Request, phone: str = Form(...), password: str = Form(
     phone = normalize_phone(phone)
     name = name.strip()
 
-    if not name:
+    if not name or len(name) < 1:
         return render(request, "signup.html", error="Name is required.")
     if len(name) > 40:
         return render(request, "signup.html", error="Name must be 40 characters or fewer.")
     if len(password) < 6:
-        return render(request, "signup.html", error="Password must be 6+ characters.")
-    if len(password) > 128:
-        return render(request, "signup.html", error="Password too long.")
+        return render(request, "signup.html", error="Password must be at least 6 characters.")
+    if len(password) > 20:
+        return render(request, "signup.html", error="Password must be 20 characters or fewer.")
+    if not re.search(r"[A-Z]", password):
+        return render(request, "signup.html", error="Password must contain an uppercase letter.")
+    if not re.search(r"[a-z]", password):
+        return render(request, "signup.html", error="Password must contain a lowercase letter.")
+    if not re.search(r"[0-9]", password):
+        return render(request, "signup.html", error="Password must contain a number.")
     if not phone or not phone.startswith("+1") or len(phone) != 12:
         return render(request, "signup.html", error="Enter a valid US phone (10 digits).")
 

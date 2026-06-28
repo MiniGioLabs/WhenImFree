@@ -2,13 +2,38 @@
 {% block title %}Log in — CalenDate{% endblock %}
 {% block content %}
 <div class="max-w-sm mx-auto">
-    <h1 class="text-2xl font-bold mb-6">Welcome back</h1>
+    <h1 class="text-2xl font-bold mb-1">Welcome back</h1>
+    <p class="text-sm text-gray-400 mb-6">We missed you.</p>
     {% if error %}<p class="text-red-500 text-sm mb-4">{{ error }}</p>{% endif %}
     <form method="POST" class="space-y-4">
-        <input type="tel" name="phone" required placeholder="US phone (e.g. 555-123-4567)" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none">
-        <input type="password" name="password" required placeholder="Password" class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none">
+        <input type="tel" name="phone" required placeholder="(555) 123-4567" maxlength="14"
+               class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none"
+               id="phone-input" inputmode="numeric" autocomplete="tel">
+        <input type="password" name="password" required minlength="6" maxlength="20" placeholder="Password"
+               class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none">
         <button type="submit" class="w-full bg-brand text-white py-3 rounded-xl font-medium hover:bg-brand-dark">Log in</button>
     </form>
     <p class="text-sm text-gray-500 mt-4 text-center">No account? <a href="/signup" class="text-brand">Sign up</a></p>
 </div>
+
+<script>
+const phoneInput = document.getElementById('phone-input');
+
+function formatPhone(digits) {
+    if (digits.length === 0) return '';
+    if (digits.length <= 3) return `(${digits}`;
+    if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+phoneInput.addEventListener('keydown', function(e) {
+    const allowed = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Tab', 'Home', 'End'];
+    if (!allowed.includes(e.key) && !/^\d$/.test(e.key)) e.preventDefault();
+});
+
+phoneInput.addEventListener('input', function() {
+    const digits = this.value.replace(/\D/g, '').slice(0, 10);
+    this.value = formatPhone(digits);
+});
+</script>
 {% endblock %}
