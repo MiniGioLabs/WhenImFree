@@ -16,7 +16,7 @@ jobs:
           username: ubuntu
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           script: |
-            cd ~/whenimfree
+            cd ~/calendate
             git pull origin main
             /home/ubuntu/.local/bin/uv sync
             sudo systemctl restart whenimfree

@@ -5,8 +5,8 @@ After=network.target
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/home/ubuntu/whenimfree
-Environment=PYTHONPATH=/home/ubuntu/whenimfree/src
+WorkingDirectory=/home/ubuntu/calendate
+Environment=PYTHONPATH=/home/ubuntu/calendate/src
 ExecStart=/home/ubuntu/.local/bin/uv run uvicorn whenimfree.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=3
