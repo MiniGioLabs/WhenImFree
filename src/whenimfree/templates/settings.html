@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Settings — WhenImFree{% endblock %}
+{% block content %}
+<div class="max-w-sm mx-auto">
+    <h1 class="text-xl font-black mb-6">Your profile</h1>
+
+    {% if request.query_params.get('saved') %}
+    <div class="bg-accent/10 text-green-700 text-sm px-4 py-3 rounded-xl mb-4 font-medium">✅ Saved!</div>
+    {% endif %}
+    {% if error %}<p class="text-red-500 text-sm mb-4 bg-red-50 px-4 py-3 rounded-xl">{{ error }}</p>{% endif %}
+
+    <!-- Avatar -->
+    <div class="bg-white border border-gray-100 rounded-2xl p-5 text-center mb-4">
+        <div id="avatar-preview" class="w-20 h-20 rounded-full bg-brand text-white flex items-center justify-center text-3xl font-black mx-auto mb-4 overflow-hidden">
+            {% if user.avatar_url %}
+            <img src="{{ user.avatar_url }}" class="w-full h-full object-cover">
+            {% else %}
+            {{ user.name[0]|upper }}
+            {% endif %}
+        </div>
+        <p class="font-bold text-gray-900 mb-1">{{ user.name }}</p>
+        <p class="text-sm text-gray-400">@{{ user.username }}</p>
+        <p class="text-xs text-gray-400 mt-0.5 mb-4">{{ format_phone(user.phone) }}</p>
+
+        <form action="/settings/avatar" method="POST" enctype="multipart/form-data" class="space-y-3">
+            <label class="block">
+                <input type="file" name="avatar" id="avatar-input" accept="image/*" required
+                       onchange="previewAvatar(this)"
+                       class="w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:bg-brand/10 file:text-brand file:font-medium hover:file:bg-brand/20 cursor-pointer">
+            </label>
+            <div id="avatar-actions" class="gap-2" style="display:none">
+                <button type="button" onclick="cancelAvatarPreview()"
+                        class="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-200">Cancel</button>
+                <button type="submit" class="flex-1 bg-brand text-white py-2.5 rounded-xl text-sm font-medium hover:bg-brand-dark">Update photo</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Profile info -->
+    <div class="bg-white border border-gray-100 rounded-2xl p-5 mb-4">
+        <h2 class="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wide">Profile info</h2>
+        <form action="/settings/profile" method="POST" class="space-y-3">
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Phone number</label>
+                <input type="text" readonly value="{{ format_phone(user.phone) }}"
+                       class="w-full px-3 py-2.5 border border-gray-100 rounded-xl text-sm bg-gray-50 text-gray-500 cursor-not-allowed outline-none">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Display name</label>
+                <input type="text" name="name" required maxlength="40" value="{{ user.name }}"
+                       class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand outline-none">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-500 mb-1">Timezone</label>
+                <select name="timezone" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand outline-none bg-white">
+                    <option value="US/Eastern" {% if user.timezone == 'US/Eastern' %}selected{% endif %}>Eastern (ET)</option>
+                    <option value="US/Central" {% if user.timezone == 'US/Central' %}selected{% endif %}>Central (CT)</option>
+                    <option value="US/Mountain" {% if user.timezone == 'US/Mountain' %}selected{% endif %}>Mountain (MT)</option>
+                    <option value="US/Pacific" {% if user.timezone == 'US/Pacific' %}selected{% endif %}>Pacific (PT)</option>
+                </select>
+            </div>
+            <button type="submit" class="w-full bg-brand text-white py-2.5 rounded-xl text-sm font-bold hover:bg-brand-dark transition-colors">Save changes</button>
+        </form>
+    </div>
+
+    <!-- Your link -->
+    <div class="bg-white border border-gray-100 rounded-2xl p-5">
+        <h2 class="text-sm font-semibold text-gray-400 mb-3 uppercase tracking-wide">Your public link</h2>
+        <div class="flex items-center gap-2">
+            <input type="text" readonly id="profile-link"
+                   value="{{ request.base_url }}@{{ user.username }}"
+                   class="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 outline-none">
+            <button onclick="copyProfileLink()"
+                    class="bg-brand text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-brand-dark transition-colors shrink-0">
+                <span id="copy-label">📋 Copy</span>
+            </button>
+        </div>
+        <a href="/@{{ user.username }}" target="_blank" class="inline-block text-xs text-gray-400 hover:text-brand mt-2 transition-colors">View your page →</a>
+    </div>
+</div>
+
+<script>
+var originalAvatarHTML = document.getElementById('avatar-preview').innerHTML;
+function previewAvatar(input) {
+    var file = input.files && input.files[0];
+    if (!file) return;
+    document.getElementById('avatar-preview').innerHTML =
+        '<img src="' + URL.createObjectURL(file) + '" class="w-full h-full object-cover">';
+    document.getElementById('avatar-actions').style.display = 'flex';
+}
+function cancelAvatarPreview() {
+    document.getElementById('avatar-input').value = '';
+    document.getElementById('avatar-preview').innerHTML = originalAvatarHTML;
+    document.getElementById('avatar-actions').style.display = 'none';
+}
+function copyProfileLink() {
+    var input = document.getElementById('profile-link');
+    var label = document.getElementById('copy-label');
+    function onCopied() { label.textContent = '✓ Copied'; setTimeout(() => label.textContent = '📋 Copy', 2000); }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(input.value).then(onCopied).catch(() => { input.select(); document.execCommand('copy'); onCopied(); });
+    } else { input.select(); document.execCommand('copy'); onCopied(); }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,98 @@
+<div id="calendar-container" data-month="{{ month }}" data-year="{{ year }}">
+    <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wide">Your Calendar</h2>
+        <div class="flex gap-1.5">
+            <button type="button" onclick="openScheduleModal()"
+                    class="text-xs font-bold text-sky bg-sky/10 px-2.5 py-1 rounded-full hover:bg-sky/20 transition-all hover:scale-105 active:scale-95">
+                📅 Weekly
+            </button>
+            <button type="button" onclick="openDayModal(today)"
+                    class="text-xs font-bold text-brand bg-brand/10 px-2.5 py-1 rounded-full hover:bg-brand/20 transition-all hover:scale-105 active:scale-95">
+                + One-off
+            </button>
+        </div>
+    </div>
+    <div class="flex items-center justify-between mb-2">
+        <button hx-get="/dashboard/calendar?month={{ month-1 if month>1 else 12 }}&year={{ year if month>1 else year-1 }}"
+                hx-target="#calendar-container"
+                class="text-gray-400 text-sm px-2 py-1 hover:text-brand transition-all hover:scale-110 active:scale-95">&larr;</button>
+        <span class="text-sm font-black text-gray-700">
+            {% set months = ['January','February','March','April','May','June','July','August','September','October','November','December'] %}
+            {{ months[month-1] }} {{ year }}
+        </span>
+        <button hx-get="/dashboard/calendar?month={{ month+1 if month<12 else 1 }}&year={{ year if month<12 else year+1 }}"
+                hx-target="#calendar-container"
+                class="text-gray-400 text-sm px-2 py-1 hover:text-brand transition-all hover:scale-110 active:scale-95">&rarr;</button>
+    </div>
+    <!-- Legend -->
+    <div class="flex items-center gap-3 mb-2 text-[10px] text-gray-400 font-medium">
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-brand inline-block"></span> One-off</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-sky inline-block"></span> Weekly</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-accent inline-block"></span> Booked</span>
+    </div>
+    <div class="grid grid-cols-7 text-center text-xs text-gray-400 py-1 font-semibold">
+        <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+    </div>
+    {% for week in cal %}
+    <div class="grid grid-cols-7">
+        {% for day in week %}
+        {% if day.is_other_month %}
+        <div class="aspect-square"></div>
+        {% else %}
+        {% set has_oneoff = day.slots | selectattr('booked', 'equalto', false) | selectattr('recurring', 'equalto', false) | list | length > 0 %}
+        {% set has_recurring = day.slots | selectattr('booked', 'equalto', false) | selectattr('recurring', 'equalto', true) | list | length > 0 %}
+        {% set has_booked = day.slots | selectattr('booked', 'equalto', true) | list | length > 0 %}
+        <div class="cal-day aspect-square border p-0.5 relative cursor-pointer rounded-md
+                    {% if day.is_today %}bg-brand/8 border-brand/40 ring-2 ring-brand/30 ring-inset
+                    {% elif has_oneoff %}bg-brand/5 border-brand/15
+                    {% elif has_recurring %}bg-sky/5 border-sky/20
+                    {% elif has_booked %}bg-accent/5 border-accent/20
+                    {% else %}border-gray-100 hover:border-brand/20{% endif %}"
+             onclick="openDayModal('{{ day.date_str }}')">
+            <div class="absolute top-0.5 right-0.5 text-[9px] font-black
+                        {% if day.is_today %}text-brand{% elif day.slots %}text-gray-600{% else %}text-gray-400{% endif %}">
+                {{ day.day }}
+            </div>
+            <div class="mt-4 space-y-px">
+                {% for slot in day.slots[:2] %}
+                {% set start_h = slot.start_time[11:13]|int %}
+                {% set start_m = slot.start_time[14:16]|int %}
+                {% set end_h   = slot.end_time[11:13]|int %}
+                {% set end_m   = slot.end_time[14:16]|int %}
+                {% set is_full = (start_h==0 and start_m==0 and end_h==23 and end_m>=59) %}
+                {% if slot.booked %}
+                <div class="flex items-center gap-0.5 py-px truncate cursor-pointer"
+                     data-booking='{{ slot | tojson }}'
+                     onclick="event.stopPropagation(); showBookingDetail(JSON.parse(this.dataset.booking))">
+                    <span class="inline-block w-1.5 h-1.5 rounded-full shrink-0 bg-accent"></span>
+                    <span class="text-[8px] text-accent leading-tight truncate font-semibold">{{ (slot.label or 'Booked')[:11] }}</span>
+                </div>
+                {% elif is_full %}
+                <div class="rounded-sm px-1 py-px text-[8px] leading-tight truncate cursor-pointer font-bold
+                            {{ 'bg-sky/20 text-sky' if slot.recurring else 'bg-brand/20 text-brand' }}"
+                     onclick="event.stopPropagation();{% if slot.recurring %}openScheduleModal(){% else %}editSlot({{ slot.id }},'{{ slot.start_time }}','{{ slot.end_time }}'){% endif %}">
+                    all day
+                </div>
+                {% else %}
+                <div class="flex items-center gap-0.5 py-px cursor-pointer truncate"
+                     onclick="event.stopPropagation();{% if slot.recurring %}openScheduleModal(){% else %}editSlot({{ slot.id }},'{{ slot.start_time }}','{{ slot.end_time }}'){% endif %}">
+                    <span class="inline-block w-1.5 h-1.5 rounded-full shrink-0 {{ 'bg-sky' if slot.recurring else 'bg-brand' }}"></span>
+                    <span class="text-[8px] text-gray-600 leading-tight truncate font-medium">
+                        {% set label = format_time(slot.start_time) ~ '–' ~ format_time(slot.end_time) %}
+                        {{ label[:13] ~ '..' if label|length>14 else label }}
+                    </span>
+                </div>
+                {% endif %}
+                {% endfor %}
+                {% if day.slots|length > 2 %}
+                <div class="text-[8px] text-brand font-bold cursor-pointer hover:underline"
+                     onclick="event.stopPropagation();showDaySlots('{{ day.date_str }}')">+{{ day.slots|length-2 }}</div>
+                {% endif %}
+            </div>
+            <div class="hidden day-slots-data" data-date="{{ day.date_str }}" data-slots='{{ day.slots|tojson }}'></div>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>

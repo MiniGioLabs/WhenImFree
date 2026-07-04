@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}WhenImFree{% endblock %}</title>
+    <meta name="description" content="{% block meta_description %}Share your availability and let friends see when you're free.{% endblock %}">
+    <meta property="og:site_name" content="WhenImFree">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="{{ request.url }}">
+    <meta property="og:title" content="{% block og_title %}WhenImFree — Share When You're Free{% endblock %}">
+    <meta property="og:description" content="{% block og_description %}Share your availability and let friends see when you're free.{% endblock %}">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="{{ self.og_title() }}">
+    <meta name="twitter:description" content="{{ self.og_description() }}">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script>tailwind.config={theme:{extend:{colors:{brand:'#FF6B6B','brand-dark':'#E55555',accent:'#84CC16',sky:'#38BDF8'}}}}</script>
+    <style>
+        /* ── HTMX indicator ── */
+        .htmx-indicator{opacity:0;transition:opacity 0.2s}
+        .htmx-request .htmx-indicator{opacity:1}
+
+        /* ── Core entrance ── */
+        @keyframes pop-in {
+            0%   { opacity:0; transform:scale(0.82) translateY(8px) }
+            100% { opacity:1; transform:scale(1) translateY(0) }
+        }
+        .pop-in { animation:pop-in 0.28s cubic-bezier(0.34,1.56,0.64,1) both }
+
+        /* ── Modal panel slide-up ── */
+        @keyframes modal-panel-in {
+            0%   { opacity:0; transform:translateY(36px) scale(0.96) }
+            100% { opacity:1; transform:translateY(0) scale(1) }
+        }
+        @keyframes backdrop-fade {
+            from { opacity:0 }
+            to   { opacity:1 }
+        }
+        [id$="-modal"]:not(.hidden) {
+            animation: backdrop-fade 0.18s ease both;
+        }
+        [id$="-modal"]:not(.hidden) > div {
+            animation: modal-panel-in 0.32s cubic-bezier(0.34,1.56,0.64,1) both;
+        }
+
+        /* ── Confetti ── */
+        @keyframes confetti-fall {
+            0%   { transform:translateY(-10px) rotate(0deg);   opacity:1 }
+            100% { transform:translateY(105vh) rotate(720deg); opacity:0 }
+        }
+
+        /* ── Float (decorative elements) ── */
+        @keyframes float {
+            0%,100% { transform:translateY(0px) rotate(0deg) }
+            33%     { transform:translateY(-10px) rotate(3deg) }
+            66%     { transform:translateY(-6px) rotate(-2deg) }
+        }
+
+        /* ── Animated gradient ── */
+        @keyframes gradient-shift {
+            0%   { background-position:0% 50% }
+            50%  { background-position:100% 50% }
+            100% { background-position:0% 50% }
+        }
+        .animated-gradient {
+            background: linear-gradient(-45deg, #FF6B6B, #F97316, #FBBF24, #84CC16, #38BDF8, #A78BFA, #EC4899);
+            background-size: 400% 400%;
+            animation: gradient-shift 10s ease infinite;
+        }
+
+        /* ── Stagger helpers ── */
+        .stagger-1 { animation-delay:0.05s }
+        .stagger-2 { animation-delay:0.10s }
+        .stagger-3 { animation-delay:0.15s }
+        .stagger-4 { animation-delay:0.20s }
+        .stagger-5 { animation-delay:0.25s }
+
+        /* ── Wiggle ── */
+        @keyframes wiggle {
+            0%,100% { transform:rotate(0deg) }
+            20%     { transform:rotate(-12deg) }
+            40%     { transform:rotate(10deg) }
+            60%     { transform:rotate(-8deg) }
+            80%     { transform:rotate(6deg) }
+        }
+        .wiggle { animation:wiggle 0.6s ease both }
+
+        /* ── Page-load slide ── */
+        @keyframes slide-up {
+            from { opacity:0; transform:translateY(20px) }
+            to   { opacity:1; transform:translateY(0) }
+        }
+        .slide-up { animation:slide-up 0.4s cubic-bezier(0.34,1.2,0.64,1) both }
+
+        /* ── Pulse glow on link card ── */
+        @keyframes glow-pulse {
+            0%,100% { box-shadow:0 4px 24px rgba(255,107,107,0.25) }
+            50%      { box-shadow:0 4px 40px rgba(255,107,107,0.50) }
+        }
+        .glow-pulse { animation:glow-pulse 3s ease-in-out infinite }
+
+        /* ── Calendar day hover ── */
+        .cal-day {
+            transition: transform 0.12s cubic-bezier(0.34,1.56,0.64,1), background 0.12s ease;
+        }
+        .cal-day:hover { transform:scale(1.06); z-index:1; }
+
+        /* ── Nav logo hover bounce ── */
+        @keyframes logo-bounce {
+            0%,100% { transform:scale(1) }
+            40%     { transform:scale(1.12) }
+            70%     { transform:scale(0.96) }
+        }
+        .logo:hover { animation:logo-bounce 0.4s cubic-bezier(0.34,1.56,0.64,1) }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen antialiased">
+    <!-- HTMX progress bar -->
+    <div id="htmx-bar" class="fixed top-0 left-0 h-0.5 z-[100] pointer-events-none"
+         style="width:0%;opacity:0;background:linear-gradient(90deg,#FF6B6B,#F97316,#84CC16);transition:opacity 0.2s"></div>
+
+    <nav class="bg-white border-b border-gray-100 sticky top-0 z-40">
+        <div class="max-w-2xl mx-auto px-4 py-3 flex items-center justify-between">
+            <a href="/" class="logo text-xl font-black tracking-tight text-brand inline-block">whenimfree<span class="text-gray-300">.</span><span class="text-accent">link</span></a>
+            <div class="flex gap-3 text-sm items-center">
+                {% if request.session.get('user_id') %}
+                    <a href="/dashboard" class="text-gray-500 hover:text-brand font-medium transition-colors">Home</a>
+                    <a href="/settings" class="text-gray-500 hover:text-brand font-medium transition-colors">Settings</a>
+                    <a href="/logout" class="text-gray-400 hover:text-red-500 transition-colors">Log out</a>
+                {% else %}
+                    <a href="/login" class="text-gray-500 hover:text-brand font-medium transition-colors">Log in</a>
+                    <a href="/signup" class="bg-brand text-white px-3 py-1.5 rounded-lg hover:bg-brand-dark font-medium transition-colors shadow-sm shadow-brand/30">Sign up</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-2xl mx-auto px-4 py-6">{% block content %}{% endblock %}</main>
+    <footer class="text-center text-gray-400 text-xs py-8">whenimfree.link — made with 💛 by MiniGioLabs</footer>
+
+    <script>
+    /* ── HTMX progress bar ── */
+    (function(){
+        var bar = document.getElementById('htmx-bar');
+        var t;
+        function start() {
+            clearTimeout(t);
+            bar.style.transition = 'width 1.8s cubic-bezier(0.1,0.8,0.2,1), opacity 0.15s';
+            bar.style.opacity = '1';
+            bar.style.width = '0%';
+            setTimeout(function(){ bar.style.width = '75%'; }, 10);
+        }
+        function finish() {
+            bar.style.transition = 'width 0.15s ease, opacity 0.3s ease';
+            bar.style.width = '100%';
+            t = setTimeout(function(){
+                bar.style.opacity = '0';
+                setTimeout(function(){ bar.style.width = '0%'; }, 300);
+            }, 200);
+        }
+        document.body.addEventListener('htmx:beforeRequest', start);
+        document.body.addEventListener('htmx:afterSettle', finish);
+        document.body.addEventListener('htmx:responseError', finish);
+    })();
+
+    /* ── Confetti ── */
+    function launchConfetti() {
+        var colors = ['#FF6B6B','#84CC16','#38BDF8','#F97316','#A78BFA','#FBBF24','#EC4899','#34D399'];
+        var shapes = ['50%','3px','0'];
+        for (var i = 0; i < 80; i++) {
+            (function(){
+                var el = document.createElement('div');
+                var size = 5 + Math.random() * 9;
+                el.style.cssText =
+                    'position:fixed;top:-12px;' +
+                    'left:' + (5 + Math.random() * 90) + 'vw;' +
+                    'width:' + size + 'px;height:' + size + 'px;' +
+                    'background:' + colors[Math.floor(Math.random() * colors.length)] + ';' +
+                    'border-radius:' + shapes[Math.floor(Math.random() * shapes.length)] + ';' +
+                    'animation:confetti-fall ' + (1 + Math.random() * 2.2) + 's ease-in forwards;' +
+                    'animation-delay:' + (Math.random() * 0.7) + 's;' +
+                    'z-index:9999;pointer-events:none;' +
+                    'transform:rotate(' + Math.floor(Math.random()*360) + 'deg);';
+                document.body.appendChild(el);
+                el.addEventListener('animationend', function(){ el.remove(); });
+            })();
+        }
+    }
+    document.body.addEventListener('slotsAdded', launchConfetti);
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

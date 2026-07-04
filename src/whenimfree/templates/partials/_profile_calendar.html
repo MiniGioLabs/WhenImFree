@@ -1,0 +1,111 @@
+<div id="profile-calendar-container">
+    {% set ns = namespace(count=0) %}
+    {% for week in cal %}{% for day in week %}
+        {% if not day.is_other_month and day.date_str >= today_str %}
+            {% set ns.count = ns.count + day.slots|length %}
+        {% endif %}
+    {% endfor %}{% endfor %}
+    <div class="flex items-center justify-between mb-2">
+        {% set is_current = (month == today_month and year == today_year) %}
+        {% set prev_m = month-1 if month > 1 else 12 %}
+        {% set prev_y = year if month > 1 else year-1 %}
+        {% set next_m = month+1 if month < 12 else 1 %}
+        {% set next_y = year if month < 12 else year+1 %}
+
+        {% if is_current %}
+        <button class="text-gray-200 text-sm px-2 py-1 cursor-not-allowed" disabled>&larr;</button>
+        {% else %}
+        <button hx-get="/@{{ username }}/calendar?month={{ prev_m }}&year={{ prev_y }}"
+                hx-target="#profile-calendar-container"
+                class="text-gray-400 text-sm px-2 py-1 hover:text-brand transition-all hover:scale-110 active:scale-95">&larr;</button>
+        {% endif %}
+
+        <div class="flex items-center gap-2">
+            <span class="text-sm font-black text-gray-700">
+                {% set month_names = ['January','February','March','April','May','June','July','August','September','October','November','December'] %}
+                {{ month_names[month-1] }} {{ year }}
+            </span>
+            {% if ns.count > 0 %}
+            <span class="text-xs bg-accent/15 text-green-700 font-bold px-2 py-0.5 rounded-full">{{ ns.count }} free</span>
+            {% endif %}
+        </div>
+
+        <button hx-get="/@{{ username }}/calendar?month={{ next_m }}&year={{ next_y }}"
+                hx-target="#profile-calendar-container"
+                class="text-gray-400 text-sm px-2 py-1 hover:text-brand transition-all hover:scale-110 active:scale-95">&rarr;</button>
+    </div>
+
+    <!-- Legend -->
+    <div class="flex items-center gap-3 mb-2 text-[10px] text-gray-400 font-medium">
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-brand inline-block"></span> One-off</span>
+        <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-sky inline-block"></span> Weekly</span>
+    </div>
+
+    <div class="grid grid-cols-7 text-center text-xs text-gray-400 py-1 font-semibold">
+        <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
+    </div>
+
+    {% for week in cal %}
+    <div class="grid grid-cols-7">
+        {% for day in week %}
+        {% if day.is_other_month %}
+        <div class="aspect-square"></div>
+        {% else %}
+        {% set has_oneoff   = day.slots | selectattr('recurring', 'equalto', false) | list | length > 0 %}
+        {% set has_recurring = day.slots | selectattr('recurring', 'equalto', true)  | list | length > 0 %}
+        {% set is_past = (not day.is_today) and (day.date_str < today_str) %}
+        <div class="cal-day aspect-square border p-0.5 relative rounded-md transition-colors
+                    {{ 'opacity-30' if is_past else '' }}
+                    {{ 'cursor-pointer' if day.slots and not is_past else '' }}
+                    {% if day.is_today %}bg-brand/8 border-brand/40 ring-2 ring-brand/30 ring-inset
+                    {% elif has_oneoff %}bg-brand/5 border-brand/15 hover:bg-brand/10
+                    {% elif has_recurring %}bg-sky/5 border-sky/20 hover:bg-sky/10
+                    {% else %}border-gray-100{% endif %}"
+             data-date="{{ day.date_str }}"
+             data-slots='{{ day.slots | tojson }}'
+             {% if day.slots and not is_past %}onclick="profileDayClick(this)"{% endif %}>
+
+            <div class="absolute top-0.5 right-0.5 text-[9px] font-black
+                        {% if day.is_today %}text-brand{% elif day.slots %}text-gray-600{% else %}text-gray-400{% endif %}">
+                {{ day.day }}
+            </div>
+
+            <div class="mt-4 space-y-px">
+                {% for slot in day.slots[:2] %}
+                {% set start_h = slot.start_time[11:13]|int %}
+                {% set start_m = slot.start_time[14:16]|int %}
+                {% set end_h   = slot.end_time[11:13]|int %}
+                {% set end_m   = slot.end_time[14:16]|int %}
+                {% set is_full = (start_h==0 and start_m==0 and end_h==23 and end_m>=59) %}
+                {% if is_full %}
+                <div class="rounded-sm px-1 py-px text-[8px] leading-tight truncate font-bold
+                            {{ 'bg-sky/20 text-sky-700' if slot.recurring else 'bg-brand/20 text-brand' }}">
+                    all day
+                </div>
+                {% else %}
+                <div class="flex items-center gap-0.5 py-px truncate">
+                    <span class="inline-block w-1.5 h-1.5 rounded-full shrink-0 {{ 'bg-sky' if slot.recurring else 'bg-brand' }}"></span>
+                    <span class="text-[8px] text-gray-600 leading-tight truncate font-medium">
+                        {% set lbl = format_time(slot.start_time) ~ '–' ~ format_time(slot.end_time) %}
+                        {{ lbl[:13] ~ '..' if lbl|length > 14 else lbl }}
+                    </span>
+                </div>
+                {% endif %}
+                {% endfor %}
+                {% if day.slots|length > 2 %}
+                <div class="text-[8px] text-brand font-bold">+{{ day.slots|length - 2 }}</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+    </div>
+    {% endfor %}
+
+    <!-- Per-month empty state -->
+    {% set ns = namespace(any=false) %}
+    {% for week in cal %}{% for day in week %}{% if day.slots %}{% set ns.any = true %}{% endif %}{% endfor %}{% endfor %}
+    {% if not ns.any %}
+    <p class="text-xs text-gray-400 text-center py-3">No free time this month.</p>
+    {% endif %}
+</div>

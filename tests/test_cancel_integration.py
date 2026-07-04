@@ -1,6 +1,6 @@
 import pytest
 
-from calendate.services.calendar import _restore_cancelled_booking
+from whenimfree.services.calendar import _restore_cancelled_booking
 
 from conftest import all_slots, insert_slot
 

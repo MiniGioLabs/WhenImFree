@@ -1,0 +1,9 @@
+{% include "partials/calendar.html" %}
+
+{% if not slots and not recurring %}
+<div class="text-center py-10 pop-in">
+    <div class="text-5xl mb-3">👀</div>
+    <p class="text-gray-500 font-medium">You look completely busy right now.</p>
+    <p class="text-sm text-gray-400 mt-1">Tap a day on the calendar to mark when you're free!</p>
+</div>
+{% endif %}

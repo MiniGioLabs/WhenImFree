@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+{% block title %}{{ profile_user.name }} (@{{ profile_user.username }}) — WhenImFree{% endblock %}
+{% block og_title %}{{ profile_user.name }} is sharing their free time{% endblock %}
+{% block og_description %}See when @{{ profile_user.username }} is free on WhenImFree.{% endblock %}
+{% block content %}
+
+<div class="max-w-sm mx-auto">
+    <!-- Profile header -->
+    <div class="text-center mb-6 slide-up">
+        <div class="relative inline-block mb-3">
+            <div class="w-24 h-24 rounded-full bg-brand text-white flex items-center justify-center text-4xl font-black mx-auto overflow-hidden ring-4 ring-brand/20 shadow-lg shadow-brand/20">
+                {% if profile_user.avatar_url %}
+                <img src="{{ profile_user.avatar_url }}" class="w-full h-full object-cover">
+                {% else %}
+                {{ profile_user.name[0]|upper }}
+                {% endif %}
+            </div>
+            <!-- Online-ish indicator if they have free slots -->
+            {% if slots %}
+            <span class="absolute bottom-1 right-1 w-4 h-4 bg-accent border-2 border-white rounded-full" title="Has free time!"></span>
+            {% endif %}
+        </div>
+        <h1 class="text-2xl font-black text-gray-900">{{ profile_user.name }}</h1>
+        <p class="text-sm text-gray-400 font-semibold">@{{ profile_user.username }}</p>
+    </div>
+
+    <!-- Calendar -->
+    <div class="bg-white border border-gray-100 rounded-2xl p-4 mb-3 slide-up" style="animation-delay:0.08s">
+        <div class="flex items-center gap-2 mb-3">
+            <span class="inline-block w-2 h-2 rounded-full bg-accent animate-pulse"></span>
+            <h2 class="text-sm font-bold text-gray-700">Free windows</h2>
+        </div>
+        {% include "partials/_profile_calendar.html" %}
+    </div>
+
+    <!-- Day detail panel — slides in when a calendar day is clicked -->
+    <div id="profile-day-panel" class="hidden bg-white border border-brand/20 rounded-2xl p-4 mb-3">
+        <div id="profile-day-content"></div>
+    </div>
+
+    {% if not request.session.get('user_id') %}
+    <div class="animated-gradient rounded-[2px] p-[2px] mt-4 pop-in" style="animation-delay:0.2s">
+        <div class="bg-white/10 backdrop-blur-sm rounded-2xl p-5 text-center text-white">
+            <p class="font-black text-lg mb-1">Share when YOU'RE free too 🎉</p>
+            <p class="text-white/85 text-sm mb-4">Create your free link in 30 seconds.</p>
+            <a href="/signup" class="inline-block bg-white text-brand px-7 py-2.5 rounded-xl font-black hover:bg-gray-50 transition-all hover:scale-105 active:scale-95 shadow-lg">
+                Get my free link
+            </a>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const PROFILE_USERNAME = '{{ profile_user.username }}';
+let _dayDate  = null;
+let _daySlots = null;
+let _reqSlotStart = null;
+let _reqSlotEnd   = null;
+
+function profileDayClick(el) {
+    const slots = JSON.parse(el.dataset.slots || '[]');
+    showProfileDay(el.dataset.date, slots);
+}
+
+function fmt12(dtStr) {
+    const h = parseInt(dtStr.substr(11, 2), 10);
+    const m = parseInt(dtStr.substr(14, 2), 10);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12  = h % 12 || 12;
+    return m === 0 ? `${h12} ${ampm}` : `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
+/* ── Time picker helpers ── */
+function _minsFromISO(iso) {
+    return parseInt(iso.substr(11, 2), 10) * 60 + parseInt(iso.substr(14, 2), 10);
+}
+function _isoAddMins(iso, mins) {
+    const total = _minsFromISO(iso) + mins;
+    const h = Math.floor(total / 60) % 24;
+    const m = total % 60;
+    return iso.slice(0, 11) + String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+}
+function _buildTimeOpts(fromISO, toISO, selectedISO) {
+    let opts = '';
+    const date = fromISO.slice(0, 10);
+    for (let mins = _minsFromISO(fromISO); mins <= _minsFromISO(toISO); mins += 15) {
+        const h = Math.floor(mins / 60);
+        const m = mins % 60;
+        const val = date + 'T' + String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+        opts += `<option value="${val}"${val === selectedISO ? ' selected' : ''}>${fmt12(val)}</option>`;
+    }
+    return opts;
+}
+function onReqStartChange() {
+    const startSel = document.getElementById('req-start');
+    const endSel   = document.getElementById('req-end');
+    if (!startSel || !endSel || !_reqSlotEnd) return;
+    const newStart  = startSel.value;
+    const minEnd    = _isoAddMins(newStart, 15);
+    const curEnd    = endSel.value;
+    endSel.innerHTML = _buildTimeOpts(minEnd, _reqSlotEnd, curEnd >= minEnd ? curEnd : _reqSlotEnd);
+}
+
+function showProfileDay(dateStr, slots) {
+    _dayDate  = dateStr;
+    _daySlots = slots;
+    const panel   = document.getElementById('profile-day-panel');
+    const content = document.getElementById('profile-day-content');
+    if (!slots || !slots.length) { panel.classList.add('hidden'); return; }
+
+    const d    = new Date(dateStr + 'T12:00:00');
+    const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    const mons = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    const heading = `${days[d.getDay()]}, ${mons[d.getMonth()]} ${d.getDate()}`;
+
+    let html = `<h3 class="text-sm font-black text-gray-700 mb-2.5">${heading}</h3><div class="space-y-2">`;
+    slots.forEach(s => {
+        const isRec = s.recurring;
+        const bg   = isRec ? 'bg-sky/10' : 'bg-brand/10';
+        const dot  = isRec ? 'bg-sky' : 'bg-brand';
+        const text = isRec ? 'text-sky-700' : 'text-brand';
+        const lbl  = s.label ? `<span class="text-xs text-gray-400">${s.label}</span>` : '';
+        html += `<div class="flex items-center gap-2 px-3 py-2 rounded-xl ${bg}">
+            <span class="w-2 h-2 rounded-full shrink-0 ${dot}"></span>
+            <span class="text-sm font-semibold ${text} flex-1">${fmt12(s.start_time)} – ${fmt12(s.end_time)}</span>
+            ${lbl}
+            <button onclick="openRequestForm('${s.start_time}','${s.end_time}')"
+                    class="text-xs bg-brand text-white font-bold px-2.5 py-1 rounded-lg hover:bg-brand-dark transition-all hover:scale-105 active:scale-95 shrink-0">
+                Request
+            </button>
+        </div>`;
+    });
+    html += '</div>';
+
+    content.innerHTML = html;
+    panel.classList.remove('hidden');
+    panel.style.animation = 'none';
+    panel.offsetHeight;
+    panel.style.animation = 'slide-up 0.22s ease-out';
+}
+
+function openRequestForm(slotStart, slotEnd) {
+    _reqSlotStart = slotStart;
+    _reqSlotEnd   = slotEnd;
+
+    const content = document.getElementById('profile-day-content');
+    const d = new Date(slotStart.slice(0, 10) + 'T12:00:00');
+    const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const mons = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const windowLabel = `${days[d.getDay()]} ${mons[d.getMonth()]} ${d.getDate()} · ${fmt12(slotStart)} – ${fmt12(slotEnd)}`;
+
+    const startOpts = _buildTimeOpts(slotStart, _isoAddMins(slotEnd, -15), slotStart);
+    const endOpts   = _buildTimeOpts(_isoAddMins(slotStart, 15), slotEnd, slotEnd);
+
+    content.innerHTML = `
+        <button onclick="showProfileDay(_dayDate, _daySlots)"
+                class="flex items-center gap-1 text-xs text-gray-400 hover:text-brand mb-3 transition-colors">
+            ← Back to slots
+        </button>
+        <h3 class="text-sm font-black text-gray-700 mb-0.5">Request a time</h3>
+        <p class="text-xs text-gray-400 mb-3">Available: ${windowLabel}</p>
+        <div id="req-error" class="hidden text-xs text-red-600 bg-red-50 px-3 py-2 rounded-lg mb-3"></div>
+        <div class="space-y-2.5">
+            <div class="flex gap-2">
+                <div class="flex-1">
+                    <label class="block text-xs font-medium text-gray-500 mb-1">From</label>
+                    <select id="req-start" onchange="onReqStartChange()"
+                            class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand outline-none bg-white">
+                        ${startOpts}
+                    </select>
+                </div>
+                <div class="flex-1">
+                    <label class="block text-xs font-medium text-gray-500 mb-1">To</label>
+                    <select id="req-end"
+                            class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand outline-none bg-white">
+                        ${endOpts}
+                    </select>
+                </div>
+            </div>
+            <div>
+                <input type="text" id="req-name" placeholder="Your name" maxlength="40"
+                       oninput="validateReqName(this)"
+                       class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand outline-none transition-shadow">
+                <p id="req-name-hint" class="text-xs text-gray-400 mt-1 pl-1">1–40 characters</p>
+            </div>
+            <div>
+                <input type="tel" id="req-phone" placeholder="(555) 555-1234"
+                       inputmode="numeric" maxlength="14"
+                       oninput="fmtReqPhone(this)"
+                       class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand outline-none transition-shadow">
+                <p id="req-phone-hint" class="text-xs text-gray-400 mt-1 pl-1">US numbers only</p>
+            </div>
+            <div>
+                <textarea id="req-note" placeholder="Add a note (optional)" maxlength="200" rows="2"
+                          oninput="updateNoteCount(this)"
+                          class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand outline-none resize-none transition-shadow"></textarea>
+                <p id="req-note-count" class="text-xs text-gray-400 mt-1 pl-1 text-right">0 / 200</p>
+            </div>
+            <button id="req-submit" onclick="submitRequest()"
+                    class="w-full bg-brand text-white py-2.5 rounded-xl text-sm font-bold hover:bg-brand-dark transition-all hover:scale-[1.02] active:scale-95 shadow-sm shadow-brand/30">
+                Send request 🎉
+            </button>
+        </div>
+    `;
+
+    const panel = document.getElementById('profile-day-panel');
+    panel.style.animation = 'none';
+    panel.offsetHeight;
+    panel.style.animation = 'slide-up 0.22s ease-out';
+}
+
+/* ── Field validators ── */
+function validateReqName(input) {
+    const hint = document.getElementById('req-name-hint');
+    if (!hint) return;
+    const v = input.value.trim();
+    const valid = v.length >= 1 && v.length <= 40;
+    hint.textContent = v.length === 0 ? '1–40 characters'
+                     : valid          ? '✓ Looks good'
+                                      : `${v.length}/40 characters`;
+    hint.className = 'text-xs mt-1 pl-1 ' + (valid && v.length > 0 ? 'text-green-500'
+                                            : v.length > 0          ? 'text-red-400'
+                                                                     : 'text-gray-400');
+}
+
+function fmtReqPhone(input) {
+    const hint   = document.getElementById('req-phone-hint');
+    const digits = input.value.replace(/\D/g, '').slice(0, 10);
+    function fmt(d) {
+        if (d.length <= 3) return d;
+        if (d.length <= 6) return '(' + d.slice(0,3) + ') ' + d.slice(3);
+        return '(' + d.slice(0,3) + ') ' + d.slice(3,6) + '-' + d.slice(6);
+    }
+    input.value = fmt(digits);
+    if (!hint) return;
+    const done = digits.length === 10;
+    hint.textContent = done             ? '✓ Valid US number'
+                     : digits.length > 0 ? `${digits.length}/10 digits`
+                                         : 'US numbers only';
+    hint.className = 'text-xs mt-1 pl-1 ' + (done             ? 'text-green-500'
+                                             : digits.length > 0 ? 'text-red-400'
+                                                                  : 'text-gray-400');
+}
+
+function updateNoteCount(textarea) {
+    const el = document.getElementById('req-note-count');
+    if (el) el.textContent = `${textarea.value.length} / 200`;
+}
+
+/* ── Form submission ── */
+async function submitRequest() {
+    const nameInput  = document.getElementById('req-name');
+    const phoneInput = document.getElementById('req-phone');
+    const noteInput  = document.getElementById('req-note');
+    const startSel   = document.getElementById('req-start');
+    const endSel     = document.getElementById('req-end');
+    const errorDiv   = document.getElementById('req-error');
+    const btn        = document.getElementById('req-submit');
+
+    const name         = nameInput.value.trim();
+    const digits       = phoneInput.value.replace(/\D/g, '');
+    const note         = noteInput.value.trim();
+    const guestStart   = startSel ? startSel.value : _reqSlotStart;
+    const guestEnd     = endSel   ? endSel.value   : _reqSlotEnd;
+
+    let err = '';
+    if (!name || name.length < 1)   err = 'Please enter your name.';
+    else if (name.length > 40)       err = 'Name must be 40 characters or fewer.';
+    else if (digits.length !== 10)   err = 'Enter a valid 10-digit US phone number.';
+    else if (!guestStart || !guestEnd || guestStart >= guestEnd)
+                                     err = 'Select a valid time range.';
+    else if (note.length > 200)      err = 'Note must be 200 characters or fewer.';
+
+    if (err) {
+        errorDiv.textContent = err;
+        errorDiv.classList.remove('hidden');
+        return;
+    }
+    errorDiv.classList.add('hidden');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+
+    const data = new FormData();
+    data.append('guest_name',      name);
+    data.append('guest_phone',     phoneInput.value);
+    data.append('requested_start', guestStart);
+    data.append('requested_end',   guestEnd);
+    data.append('note',            note);
+
+    try {
+        const resp = await fetch('/@' + PROFILE_USERNAME + '/request', { method: 'POST', body: data });
+        const html = await resp.text();
+        if (resp.ok) {
+            document.getElementById('profile-day-content').innerHTML = html;
+        } else {
+            errorDiv.textContent = html;
+            errorDiv.classList.remove('hidden');
+            btn.disabled = false;
+            btn.textContent = 'Send request 🎉';
+        }
+    } catch (_) {
+        errorDiv.textContent = 'Something went wrong — please try again.';
+        errorDiv.classList.remove('hidden');
+        btn.disabled = false;
+        btn.textContent = 'Send request 🎉';
+    }
+}
+
+document.addEventListener('htmx:beforeRequest', function(e) {
+    if (e.detail.target && e.detail.target.id === 'profile-calendar-container') {
+        document.getElementById('profile-day-panel').classList.add('hidden');
+    }
+});
+</script>
+{% endblock %}

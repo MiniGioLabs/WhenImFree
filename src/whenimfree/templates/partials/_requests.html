@@ -1,0 +1,111 @@
+<div id="requests-container" class="bg-white border border-gray-100 rounded-2xl p-4">
+
+    <!-- Header + tabs -->
+    <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2">
+            <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wide">Requests</h2>
+            {% if pending_count %}
+            <span class="text-xs bg-brand/15 text-brand font-bold px-2 py-0.5 rounded-full">{{ pending_count }} new</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Filter tabs -->
+    <div class="flex gap-1.5 mb-4 flex-wrap">
+        <button hx-get="/dashboard/requests?status=all"
+                hx-target="#requests-container"
+                hx-swap="outerHTML"
+                class="text-xs font-bold px-3 py-1.5 rounded-lg transition-colors
+                       {{ 'bg-gray-800 text-white' if status_filter == 'all' else 'bg-gray-100 text-gray-500 hover:bg-gray-200' }}">
+            All{% if total_count %} ({{ total_count }}){% endif %}
+        </button>
+        <button hx-get="/dashboard/requests?status=pending"
+                hx-target="#requests-container"
+                hx-swap="outerHTML"
+                class="text-xs font-bold px-3 py-1.5 rounded-lg transition-colors
+                       {{ 'bg-brand text-white' if status_filter == 'pending' else 'bg-gray-100 text-gray-500 hover:bg-gray-200' }}">
+            Pending{% if pending_count %} ({{ pending_count }}){% endif %}
+        </button>
+        <button hx-get="/dashboard/requests?status=accepted"
+                hx-target="#requests-container"
+                hx-swap="outerHTML"
+                class="text-xs font-bold px-3 py-1.5 rounded-lg transition-colors
+                       {{ 'bg-accent text-white' if status_filter == 'accepted' else 'bg-gray-100 text-gray-500 hover:bg-gray-200' }}">
+            Accepted{% if accepted_count %} ({{ accepted_count }}){% endif %}
+        </button>
+        <button hx-get="/dashboard/requests?status=declined"
+                hx-target="#requests-container"
+                hx-swap="outerHTML"
+                class="text-xs font-bold px-3 py-1.5 rounded-lg transition-colors
+                       {{ 'bg-gray-800 text-white' if status_filter == 'declined' else 'bg-gray-100 text-gray-500 hover:bg-gray-200' }}">
+            Declined{% if declined_count %} ({{ declined_count }}){% endif %}
+        </button>
+    </div>
+
+    <!-- List -->
+    {% if not booking_requests %}
+    <div class="text-center py-6">
+        <div class="text-3xl mb-2">
+            {% if status_filter == 'pending' %}⏳
+            {% elif status_filter == 'accepted' %}✅
+            {% elif status_filter == 'declined' %}🚫
+            {% else %}📭{% endif %}
+        </div>
+        <p class="text-sm text-gray-400">
+            {% if status_filter == 'pending' %}No pending requests.
+            {% elif status_filter == 'accepted' %}No accepted requests yet.
+            {% elif status_filter == 'declined' %}No declined requests.
+            {% else %}No requests yet — share your link to get started!{% endif %}
+        </p>
+    </div>
+    {% else %}
+    <div class="space-y-2">
+        {% for req in booking_requests %}
+        <div class="border rounded-2xl p-3.5 pop-in
+                    {% if req.status == 'pending' %}border-brand/20 bg-brand/3
+                    {% elif req.status == 'accepted' %}border-accent/20 bg-accent/5
+                    {% else %}border-gray-100 bg-gray-50 opacity-50{% endif %}"
+             style="animation-delay:{{ loop.index0 * 0.04 }}s">
+            <div class="flex items-start justify-between gap-3">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-0.5">
+                        <p class="font-bold text-gray-800 text-sm truncate">{{ req.guest_name }}</p>
+                        {% if req.status == 'pending' %}
+                        <span class="text-[10px] bg-brand/10 text-brand font-bold px-1.5 py-0.5 rounded-full shrink-0">new</span>
+                        {% elif req.status == 'accepted' %}
+                        <span class="text-[10px] bg-accent/15 text-green-700 font-bold px-1.5 py-0.5 rounded-full shrink-0">confirmed ✓</span>
+                        {% else %}
+                        <span class="text-[10px] bg-gray-100 text-gray-400 font-bold px-1.5 py-0.5 rounded-full shrink-0">declined</span>
+                        {% endif %}
+                    </div>
+                    <p class="text-xs text-gray-400 mb-1">{{ format_phone(req.guest_phone) }}</p>
+                    <p class="text-xs text-gray-600 font-semibold">
+                        {{ format_slot_time(req.requested_start) }} – {{ format_time(req.requested_end) }}
+                    </p>
+                    {% if req.note %}
+                    <p class="text-xs text-gray-400 mt-1.5 italic">"{{ req.note }}"</p>
+                    {% endif %}
+                </div>
+                {% if req.status == 'pending' %}
+                <div class="flex flex-col gap-1.5 shrink-0 pt-0.5">
+                    <button hx-post="/requests/{{ req.id }}/accept"
+                            hx-target="#requests-container"
+                            hx-swap="outerHTML"
+                            class="text-xs bg-accent/15 text-green-700 font-bold px-3 py-1.5 rounded-lg hover:bg-accent/25 transition-colors whitespace-nowrap">
+                        ✓ Accept
+                    </button>
+                    <button hx-post="/requests/{{ req.id }}/decline"
+                            hx-target="#requests-container"
+                            hx-swap="outerHTML"
+                            hx-confirm="Decline this request?"
+                            class="text-xs bg-gray-100 text-gray-500 font-bold px-3 py-1.5 rounded-lg hover:bg-red-50 hover:text-red-500 transition-colors whitespace-nowrap">
+                        ✕ Decline
+                    </button>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
