@@ -13,9 +13,13 @@
         </div>
     </div>
     <div class="flex items-center justify-between mb-2">
+        {% if is_current_month(month, year) %}
+        <span class="w-6"></span>
+        {% else %}
         <button hx-get="/dashboard/calendar?month={{ month-1 if month>1 else 12 }}&year={{ year if month>1 else year-1 }}"
                 hx-target="#calendar-container"
                 class="text-gray-400 text-sm px-2 py-1 hover:text-brand transition-all hover:scale-110 active:scale-95">&larr;</button>
+        {% endif %}
         <span class="text-sm font-black text-gray-700">
             {% set months = ['January','February','March','April','May','June','July','August','September','October','November','December'] %}
             {{ months[month-1] }} {{ year }}
@@ -42,13 +46,15 @@
         {% set has_oneoff = day.slots | selectattr('booked', 'equalto', false) | selectattr('recurring', 'equalto', false) | list | length > 0 %}
         {% set has_recurring = day.slots | selectattr('booked', 'equalto', false) | selectattr('recurring', 'equalto', true) | list | length > 0 %}
         {% set has_booked = day.slots | selectattr('booked', 'equalto', true) | list | length > 0 %}
-        <div class="cal-day aspect-square border p-0.5 relative cursor-pointer rounded-md
+        <div class="cal-day aspect-square border p-0.5 relative rounded-md
+                    {% if day.is_past %}opacity-40 cursor-default
+                    {% else %}cursor-pointer{% endif %}
                     {% if day.is_today %}bg-brand/8 border-brand/40 ring-2 ring-brand/30 ring-inset
                     {% elif has_oneoff %}bg-brand/5 border-brand/15
                     {% elif has_recurring %}bg-sky/5 border-sky/20
                     {% elif has_booked %}bg-accent/5 border-accent/20
-                    {% else %}border-gray-100 hover:border-brand/20{% endif %}"
-             onclick="openDayModal('{{ day.date_str }}')">
+                    {% else %}border-gray-100 {% if not day.is_past %}hover:border-brand/20{% endif %}{% endif %}"
+             {% if not day.is_past %}onclick="openDayModal('{{ day.date_str }}')"{% endif %}>
             <div class="absolute top-0.5 right-0.5 text-[9px] font-black
                         {% if day.is_today %}text-brand{% elif day.slots %}text-gray-600{% else %}text-gray-400{% endif %}">
                 {{ day.day }}

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from fastapi import Request
@@ -60,6 +60,11 @@ def format_hhmm(hhmm: str) -> str:
         return hhmm
 
 
+def is_current_month(month: int, year: int) -> bool:
+    today = date.today()
+    return (year, month) == (today.year, today.month)
+
+
 def format_phone(phone: str) -> str:
     if not phone:
         return ""
@@ -80,6 +85,7 @@ templates.env.globals["format_time"] = format_time
 templates.env.globals["format_dows"] = format_dows
 templates.env.globals["format_hhmm"] = format_hhmm
 templates.env.globals["format_phone"] = format_phone
+templates.env.globals["is_current_month"] = is_current_month
 
 
 def render(request: Request, template: str, **kwargs) -> HTMLResponse:

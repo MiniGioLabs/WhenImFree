@@ -52,11 +52,8 @@
             </div>
             <div>
                 <label class="block text-xs font-medium text-gray-500 mb-1">Timezone</label>
-                <select name="timezone" class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-brand outline-none bg-white">
-                    <option value="US/Eastern" {% if user.timezone == 'US/Eastern' %}selected{% endif %}>Eastern (ET)</option>
-                    <option value="US/Central" {% if user.timezone == 'US/Central' %}selected{% endif %}>Central (CT)</option>
-                    <option value="US/Mountain" {% if user.timezone == 'US/Mountain' %}selected{% endif %}>Mountain (MT)</option>
-                    <option value="US/Pacific" {% if user.timezone == 'US/Pacific' %}selected{% endif %}>Pacific (PT)</option>
+                <select disabled class="w-full px-3 py-2.5 border border-gray-200 rounded-xl text-sm outline-none bg-gray-50 text-gray-500 cursor-not-allowed">
+                    <option selected>Eastern (ET)</option>
                 </select>
             </div>
             <button type="submit" class="w-full bg-brand text-white py-2.5 rounded-xl text-sm font-bold hover:bg-brand-dark transition-colors">Save changes</button>

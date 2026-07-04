@@ -96,6 +96,7 @@ def _build_calendar(
                 ds = f"{year}-{month:02d}-{day_num:02d}"
                 day_slots = sorted(by_date.get(ds, []), key=lambda x: x["start_time"])
                 week_days.append({"day": day_num, "date_str": ds, "slots": day_slots,
-                                  "is_today": ds == today.isoformat(), "is_other_month": False})
+                                  "is_today": ds == today.isoformat(), "is_other_month": False,
+                                  "is_past": date(year, month, day_num) < today})
         weeks.append(week_days)
     return weeks

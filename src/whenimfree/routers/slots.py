@@ -12,6 +12,17 @@ from ..utils import format_time, templates
 router = APIRouter()
 
 
+def _is_past(start: str) -> bool:
+    return start[:10] < date.today().isoformat()
+
+
+def _past_error_html(target: str) -> HTMLResponse:
+    resp = HTMLResponse('<div class="bg-red-50 text-red-600 text-sm px-4 py-3 rounded-xl mt-2">Can\'t set availability in the past.</div>')
+    resp.headers["HX-Retarget"] = target
+    resp.headers["HX-Reswap"] = "innerHTML"
+    return resp
+
+
 async def _conflict_check(db, user_id: int, start: str, end: str):
     """Return the first accepted booking that overlaps [start, end), or None."""
     return await (await db.execute(
@@ -63,6 +74,11 @@ async def create_slot(request: Request, start_time: str = Form(...), end_time: s
             return resp
         return RedirectResponse("/dashboard?error=invalid_times", status_code=302)
 
+    if _is_past(start_time):
+        if request.headers.get("HX-Request"):
+            return _past_error_html("#modal-error")
+        return RedirectResponse("/dashboard?error=past_date", status_code=302)
+
     db = await get_db()
     try:
         conflict = await _conflict_check(db, user["id"], start_time, end_time)
@@ -103,6 +119,11 @@ async def create_slots_bulk(request: Request, blocks: str = Form(...),
             resp.headers["HX-Reswap"] = "innerHTML"
             return resp
         return RedirectResponse("/dashboard?error=invalid_times", status_code=302)
+
+    if any(_is_past(b["start_time"]) for b in valid):
+        if request.headers.get("HX-Request"):
+            return _past_error_html("#modal-error")
+        return RedirectResponse("/dashboard?error=past_date", status_code=302)
 
     db = await get_db()
     try:
@@ -149,6 +170,9 @@ async def edit_slot(request: Request, slot_id: int,
     user = await get_current_user(request)
     if not user:
         raise HTTPException(status_code=401)
+
+    if _is_past(start_time):
+        return _past_error_html("#edit-error")
 
     db = await get_db()
     try:

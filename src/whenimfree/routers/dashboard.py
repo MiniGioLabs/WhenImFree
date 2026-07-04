@@ -29,6 +29,7 @@ async def dashboard(request: Request, month: int = Query(None), year: int = Quer
     year = year or today.year
     if month < 1: month = 12; year -= 1
     if month > 12: month = 1; year += 1
+    if (year, month) < (today.year, today.month): year, month = today.year, today.month
 
     db = await get_db()
     try:
@@ -66,6 +67,7 @@ async def dashboard_calendar(request: Request, month: int = Query(None), year: i
     year = year or today.year
     if month < 1: month = 12; year -= 1
     if month > 12: month = 1; year += 1
+    if (year, month) < (today.year, today.month): year, month = today.year, today.month
 
     db = await get_db()
     try:

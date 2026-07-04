@@ -23,7 +23,7 @@ async def settings_page(request: Request):
 
 
 @router.post("/settings/profile")
-async def update_profile(request: Request, name: str = Form(...), timezone: str = Form("US/Eastern")):
+async def update_profile(request: Request, name: str = Form(...)):
     user = await get_current_user(request)
     if not user:
         return RedirectResponse("/login", status_code=302)
@@ -32,7 +32,7 @@ async def update_profile(request: Request, name: str = Form(...), timezone: str 
         return render(request, "settings.html", user=user, error="Name must be 1–40 characters.")
     db = await get_db()
     try:
-        await db.execute("UPDATE users SET name=?, timezone=? WHERE id=?", (name, timezone, user["id"]))
+        await db.execute("UPDATE users SET name=?, timezone=? WHERE id=?", (name, "US/Eastern", user["id"]))
         await db.commit()
     finally:
         await db.close()
