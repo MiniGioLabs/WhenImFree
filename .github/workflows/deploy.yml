@@ -1,4 +1,4 @@
-name: Deploy CalenDate
+name: Deploy WhenImFree
 
 on:
   push:
@@ -16,15 +16,15 @@ jobs:
           username: ubuntu
           key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           script: |
-            cd ~/calendate
+            cd ~/whenimfree
             git pull origin main
             /home/ubuntu/.local/bin/uv sync
-            sudo systemctl restart calendate
+            sudo systemctl restart whenimfree
             # Wait for app to be healthy (up to 30s)
             for i in $(seq 1 10); do
               curl -sf http://localhost:8000/health && break
               sleep 3
-            done || { echo "ERROR: app failed to start"; sudo journalctl -u calendate -n 30 --no-pager; exit 1; }
+            done || { echo "ERROR: app failed to start"; sudo journalctl -u whenimfree -n 30 --no-pager; exit 1; }
             # Ensure Caddy is running
             sudo systemctl is-active --quiet caddy || { sudo systemctl start caddy && sleep 2; }
             sudo systemctl is-active caddy || { echo "ERROR: Caddy is not running"; sudo journalctl -u caddy -n 30 --no-pager; exit 1; }
