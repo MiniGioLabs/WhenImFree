@@ -1,22 +1,90 @@
-"""Calendar building + slot splitting/merging."""
+"""Calendar building + recurring slot expansion."""
 
 
-def _build_calendar(year: int, month: int, slots: list, booked: list, approved_requests: list = None) -> list:
+def _expand_recurring(recurring: list, year: int, month: int) -> list:
+    """Expand recurring slot rules into concrete slot dicts for every matching day in a month."""
+    import calendar as cal_mod
+    from datetime import date
+
+    result = []
+    _, days_in_month = cal_mod.monthrange(year, month)
+
+    for day_num in range(1, days_in_month + 1):
+        d = date(year, month, day_num)
+        # isoweekday: Mon=1..Sun=7 → we want Sun=0, Mon=1..Sat=6
+        dow = d.isoweekday() % 7
+        for r in recurring:
+            if not r.get("active", 1):
+                continue
+            rule_dows = {int(x) for x in str(r["dows"]).split(",") if x.strip().isdigit()}
+            if dow in rule_dows:
+                ds = d.isoformat()
+                result.append({
+                    "id": None,
+                    "start_time": f"{ds}T{r['start_hhmm']}",
+                    "end_time": f"{ds}T{r['end_hhmm']}",
+                    "recurring": True,
+                    "recurring_id": r["id"],
+                    "label": r.get("label") or "",
+                    "booked": False,
+                })
+    return result
+
+
+def _build_calendar(
+    year: int,
+    month: int,
+    slots: list,
+    recurring: list = None,
+    bookings: list = None,
+    blocked_times: set = None,
+) -> list:
+    """
+    Build a weekly grid for the given month.
+    - slots: one-off availability slots (already filtered to available status)
+    - recurring: recurring slot rules (expanded per-month; occurrences that overlap any
+                 entry in blocked_times are suppressed)
+    - bookings: accepted booking_requests to render as green "booked" entries (host calendar only)
+    - blocked_times: set of (start_time, end_time) tuples from accepted bookings; any recurring
+                     occurrence whose window overlaps a blocked range is hidden (supports partial
+                     booking where a sub-range of a recurring window was accepted)
+    """
     import calendar as cal_mod
     from datetime import date
 
     today = date.today()
     cal = cal_mod.Calendar(cal_mod.SUNDAY)
 
-    slot_request_map = {}
-    if approved_requests:
-        for req in approved_requests:
-            slot_request_map[req["slot_id"]] = req["id"]
-
-    by_date = {}
+    by_date: dict = {}
     for s in slots:
         ds = s["start_time"][:10]
-        by_date.setdefault(ds, []).append(s)
+        by_date.setdefault(ds, []).append({**s, "recurring": False, "booked": False})
+
+    if recurring:
+        for s in _expand_recurring(recurring, year, month):
+            if blocked_times:
+                occ_start = s["start_time"]
+                occ_end = s["end_time"]
+                # Block this occurrence if any accepted booking overlaps with it
+                # (handles partial bookings where requested_start/end != occurrence bounds)
+                if any(b_start < occ_end and b_end > occ_start for b_start, b_end in blocked_times):
+                    continue
+            ds = s["start_time"][:10]
+            by_date.setdefault(ds, []).append(s)
+
+    if bookings:
+        for b in bookings:
+            ds = b["requested_start"][:10]
+            by_date.setdefault(ds, []).append({
+                "id": b["id"],
+                "start_time": b["requested_start"],
+                "end_time": b["requested_end"],
+                "recurring": False,
+                "booked": True,
+                "label": b.get("guest_name", "Booked"),
+                "guest_phone": b.get("guest_phone", ""),
+                "note": b.get("note", ""),
+            })
 
     weeks = []
     for week in cal.monthdayscalendar(year, month):
@@ -26,132 +94,8 @@ def _build_calendar(year: int, month: int, slots: list, booked: list, approved_r
                 week_days.append({"day": "", "date_str": "", "slots": [], "is_today": False, "is_other_month": True})
             else:
                 ds = f"{year}-{month:02d}-{day_num:02d}"
-                day_slots = by_date.get(ds, [])
-                slot_list = []
-                for s in day_slots:
-                    request_id = slot_request_map.get(s["id"])
-                    slot_list.append({
-                        "id": s["id"], "start_time": s["start_time"], "end_time": s["end_time"],
-                        "status": "booked" if request_id else "open",
-                        "request_id": request_id,
-                    })
-                week_days.append({"day": day_num, "date_str": ds, "slots": slot_list,
+                day_slots = sorted(by_date.get(ds, []), key=lambda x: x["start_time"])
+                week_days.append({"day": day_num, "date_str": ds, "slots": day_slots,
                                   "is_today": ds == today.isoformat(), "is_other_month": False})
         weeks.append(week_days)
     return weeks
-
-
-def _build_booking_calendar(slots: list, booked_by_slot: dict | None = None, year: int = None, month: int = None) -> dict:
-    import calendar as cal_mod
-    from datetime import date
-
-    today = date.today()
-    if year is None: year = today.year
-    if month is None: month = today.month
-    booked_by_slot = booked_by_slot or {}
-
-    cal = cal_mod.Calendar(cal_mod.SUNDAY)
-    open_dates = set()
-    for s in slots:
-        if _free_time_ranges(s, booked_by_slot.get(s["id"], [])):
-            open_dates.add(s["start_time"][:10])
-
-    weeks = []
-    for week in cal.monthdayscalendar(year, month):
-        week_days = []
-        for day_num in week:
-            if day_num == 0:
-                week_days.append({"day": "", "date_str": "", "is_open": False, "is_today": False, "is_other_month": True})
-            else:
-                ds = f"{year}-{month:02d}-{day_num:02d}"
-                week_days.append({"day": day_num, "date_str": ds, "is_open": ds in open_dates,
-                                  "is_today": ds == today.isoformat(), "is_other_month": False})
-        weeks.append(week_days)
-    return {"year": year, "month": month, "weeks": weeks}
-
-
-def _free_time_ranges(slot: dict, booked: list[dict]) -> list:
-    from datetime import datetime
-
-    slot_start = datetime.fromisoformat(slot["start_time"])
-    slot_end = datetime.fromisoformat(slot["end_time"])
-
-    booked_intervals = []
-    for req in booked:
-        b_start = req.get("proposed_start")
-        b_end = req.get("proposed_end")
-        if b_start and b_end:
-            booked_intervals.append((datetime.fromisoformat(b_start), datetime.fromisoformat(b_end)))
-
-    booked_intervals.sort()
-    merged = []
-    for start, end in booked_intervals:
-        if merged and start <= merged[-1][1]:
-            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
-        else:
-            merged.append((start, end))
-
-    free = []
-    cursor = slot_start
-    for b_start, b_end in merged:
-        if cursor < b_start:
-            free.append((cursor.isoformat(), b_start.isoformat()))
-        cursor = max(cursor, b_end)
-    if cursor < slot_end:
-        free.append((cursor.isoformat(), slot_end.isoformat()))
-    return free
-
-
-async def _split_slot_around_booking(db, slot_id: int, booked_start: str, booked_end: str) -> None:
-    from ..auth import generate_token
-
-    row = await db.execute("SELECT * FROM availability_slots WHERE id=?", (slot_id,))
-    slot = await row.fetchone()
-    if not slot: return
-
-    if booked_start > slot["start_time"]:
-        await db.execute(
-            "INSERT INTO availability_slots (user_id, token, start_time, end_time, deposit_cents) VALUES (?,?,?,?,0)",
-            (slot["user_id"], generate_token(), slot["start_time"], booked_start))
-    if booked_end < slot["end_time"]:
-        await db.execute(
-            "INSERT INTO availability_slots (user_id, token, start_time, end_time, deposit_cents) VALUES (?,?,?,?,0)",
-            (slot["user_id"], generate_token(), booked_end, slot["end_time"]))
-
-    # Shrink the original slot to exactly the booked window so its leftover time isn't
-    # double-counted alongside the new fragment rows above (date_requests.slot_id keeps
-    # pointing at this row, so it can't simply be deleted).
-    await db.execute(
-        "UPDATE availability_slots SET start_time=?, end_time=? WHERE id=?",
-        (booked_start, booked_end, slot_id))
-
-
-async def _restore_cancelled_booking(db, user_id: int, start: str, end: str) -> None:
-    """Reopen a cancelled booking's time range as availability for this host, merging it
-    with any availability slots that are adjacent to or overlap that range so we don't
-    leave duplicate or overlapping rows behind.
-    """
-    from ..auth import generate_token
-
-    rows = await db.execute(
-        """SELECT s.* FROM availability_slots s
-           WHERE s.user_id=? AND s.end_time>=? AND s.start_time<=?
-           AND NOT EXISTS (SELECT 1 FROM date_requests r WHERE r.slot_id=s.id)""",
-        (user_id, start, end))
-    overlapping = [dict(r) for r in await rows.fetchall()]
-
-    # If the freed slot's range isn't covered by any slot in the free list, another
-    # pending request still holds that slot — it's already represented, skip restore.
-    # Truncate to minute precision to tolerate ":00" seconds suffix mismatches.
-    if not any(s["start_time"][:16] <= start[:16] and s["end_time"][:16] >= end[:16] for s in overlapping):
-        return
-
-    merged_start = min([start] + [s["start_time"] for s in overlapping])
-    merged_end = max([end] + [s["end_time"] for s in overlapping])
-
-    for s in overlapping:
-        await db.execute("DELETE FROM availability_slots WHERE id=?", (s["id"],))
-
-    await db.execute(
-        "INSERT INTO availability_slots (user_id, token, start_time, end_time, deposit_cents) VALUES (?,?,?,?,0)",
-        (user_id, generate_token(), merged_start, merged_end))

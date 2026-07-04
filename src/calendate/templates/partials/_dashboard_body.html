@@ -1,37 +1,9 @@
 {% include "partials/calendar.html" %}
 
-<!-- Requests -->
-{% if requests %}
-<div class="mb-6 mt-4">
-    {% set pending = requests|selectattr('status','equalto','pending')|list %}
-    {% set approved = requests|selectattr('status','equalto','approved')|list|sort_by_start %}
-    {% set declined = requests|selectattr('status','equalto','declined')|list %}
-
-    {% if pending %}
-    <h2 class="text-sm font-semibold text-yellow-600 mb-2 uppercase tracking-wide">⏳ Pending ({{ pending|length }})</h2>
-    <div class="space-y-2 mb-4">
-        {% for req in pending %}
-            {% with status='pending' %}{% include "partials/request_card.html" %}{% endwith %}
-        {% endfor %}
-    </div>
-    {% endif %}
-
-    {% if approved %}
-    <h2 class="text-sm font-semibold text-green-600 mb-2 uppercase tracking-wide">✅ Confirmed ({{ approved|length }})</h2>
-    <div class="space-y-2 mb-4">
-        {% for req in approved %}
-            {% with status='approved' %}{% include "partials/request_card.html" %}{% endwith %}
-        {% endfor %}
-    </div>
-    {% endif %}
-
-    {% if declined %}
-    <h2 class="text-sm font-semibold text-red-600 mb-2 uppercase tracking-wide">❌ Passed ({{ declined|length }})</h2>
-    <div class="space-y-2 mb-4">
-        {% for req in declined %}
-            {% with status='declined' %}{% include "partials/request_card.html" %}{% endwith %}
-        {% endfor %}
-    </div>
-    {% endif %}
+{% if not slots and not recurring %}
+<div class="text-center py-10 pop-in">
+    <div class="text-5xl mb-3">👀</div>
+    <p class="text-gray-500 font-medium">You look completely busy right now.</p>
+    <p class="text-sm text-gray-400 mt-1">Tap a day on the calendar to mark when you're free!</p>
 </div>
 {% endif %}

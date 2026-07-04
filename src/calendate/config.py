@@ -12,18 +12,14 @@ class Settings(BaseSettings):
     TEMPLATES_DIR: str = ""
     STATIC_DIR: str = ""
 
-    # Stripe
-    STRIPE_SECRET_KEY: str = ""
-    STRIPE_WEBHOOK_SECRET: str = ""
-
-    # Twilio
-    TWILIO_ACCOUNT_SID: str = ""
-    TWILIO_AUTH_TOKEN: str = ""
-    TWILIO_PHONE_NUMBER: str = ""
-
     # PostHog
     POSTHOG_API_KEY: str = ""
     POSTHOG_HOST: str = "https://us.posthog.com"
+
+    # Twilio (SMS notifications)
+    TWILIO_ACCOUNT_SID: str = ""
+    TWILIO_AUTH_TOKEN: str = ""
+    TWILIO_FROM_NUMBER: str = ""
 
     # S3
     AWS_ACCESS_KEY_ID: str = ""
@@ -33,7 +29,7 @@ class Settings(BaseSettings):
 
     @property
     def twilio_configured(self) -> bool:
-        return bool(self.TWILIO_ACCOUNT_SID and self.TWILIO_AUTH_TOKEN)
+        return bool(self.TWILIO_ACCOUNT_SID and self.TWILIO_AUTH_TOKEN and self.TWILIO_FROM_NUMBER)
 
     @property
     def posthog_configured(self) -> bool:
@@ -42,10 +38,6 @@ class Settings(BaseSettings):
     @property
     def s3_configured(self) -> bool:
         return bool(self.AWS_ACCESS_KEY_ID and self.AWS_S3_BUCKET)
-
-    @property
-    def stripe_configured(self) -> bool:
-        return bool(self.STRIPE_SECRET_KEY)
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 

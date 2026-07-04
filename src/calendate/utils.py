@@ -1,47 +1,25 @@
-"""Helpers: templates, formatting, SMS."""
+"""Helpers: templates, formatting."""
 
 from __future__ import annotations
 
 import logging
-import uuid
-from datetime import datetime, timezone
+import re
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from twilio.rest import Client as TwilioClient
 
 from .config import settings
 
 logger = logging.getLogger(__name__)
-_twilio: TwilioClient | None = None
-
-
-def get_twilio() -> TwilioClient:
-    global _twilio
-    if _twilio is None and settings.TWILIO_ACCOUNT_SID:
-        _twilio = TwilioClient(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
-    return _twilio
-
-
-async def send_sms(to: str, body: str) -> bool:
-    if not settings.twilio_configured:
-        logger.info("[SMS] To: %s — %s", to, body[:80])
-        return True
-    try:
-        msg = get_twilio().messages.create(body=body, from_=settings.TWILIO_PHONE_NUMBER, to=to)
-        logger.info("SMS sent: %s", msg.sid)
-        return True
-    except Exception as e:
-        logger.error("SMS failed: %s", e)
-        return False
 
 
 def format_slot_time(iso: str) -> str:
     try:
         dt = datetime.fromisoformat(iso)
-        return dt.strftime("%a %b %d, %I:%M %p") + " EST"
+        return dt.strftime("%a %b %d, %I:%M %p")
     except (ValueError, TypeError):
         return iso
 
@@ -62,12 +40,36 @@ def format_time(iso: str) -> str:
         return iso[11:16]
 
 
-def sort_by_start(reqs: list[dict]) -> list[dict]:
-    """Chronological order by the actual booked window (proposed_start if a sub-range was requested)."""
-    return sorted(reqs, key=lambda r: r.get("proposed_start") or r.get("start_time") or "")
+_DOW_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
 
-# ── Templates ──────────────────────────────────────────────────────
+def format_dows(dows_str: str) -> str:
+    try:
+        return ", ".join(_DOW_NAMES[int(d)] for d in str(dows_str).split(",") if d.strip().isdigit())
+    except (ValueError, IndexError):
+        return str(dows_str)
+
+
+def format_hhmm(hhmm: str) -> str:
+    try:
+        h, m = int(hhmm[:2]), int(hhmm[3:5])
+        ap = "AM" if h < 12 else "PM"
+        h12 = h % 12 or 12
+        return f"{h12}:{m:02d} {ap}" if m else f"{h12} {ap}"
+    except (ValueError, TypeError, IndexError):
+        return hhmm
+
+
+def format_phone(phone: str) -> str:
+    if not phone:
+        return ""
+    digits = re.sub(r'\D', '', phone)
+    if len(digits) == 11 and digits.startswith('1'):
+        return f"({digits[1:4]}) {digits[4:7]}-{digits[7:]}"
+    if len(digits) == 10:
+        return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+    return phone
+
 
 _tdir = Path(settings.TEMPLATES_DIR) if settings.TEMPLATES_DIR else Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(_tdir))
@@ -75,7 +77,9 @@ static_dir = Path(settings.STATIC_DIR) if settings.STATIC_DIR else Path(__file__
 templates.env.globals["format_slot_time"] = format_slot_time
 templates.env.globals["format_slot_day"] = format_slot_day
 templates.env.globals["format_time"] = format_time
-templates.env.filters["sort_by_start"] = sort_by_start
+templates.env.globals["format_dows"] = format_dows
+templates.env.globals["format_hhmm"] = format_hhmm
+templates.env.globals["format_phone"] = format_phone
 
 
 def render(request: Request, template: str, **kwargs) -> HTMLResponse:
@@ -84,7 +88,6 @@ def render(request: Request, template: str, **kwargs) -> HTMLResponse:
 
 def upload_to_s3(file_data: bytes, filename: str, content_type: str) -> str:
     """Upload a file to S3. Returns the public URL, or empty string if not configured."""
-    from .config import settings
     if not settings.s3_configured:
         return ""
     import boto3

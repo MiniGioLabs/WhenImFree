@@ -1,213 +1,159 @@
-"""Date request action routes."""
+"""Booking request routes (owner-side: view, accept, decline)."""
 
-import logging
-import stripe
-from fastapi import APIRouter, Form, Request, HTTPException
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 
-from ..auth import generate_token, get_current_user
-from ..config import settings
+from ..auth import get_current_user
 from ..db import get_db
-from ..utils import render, templates, send_sms
-from ..services.calendar import _split_slot_around_booking, _restore_cancelled_booking
+from ..utils import render
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/date/{share_token}", response_class=HTMLResponse)
-async def view_shared_date(request: Request, share_token: str):
-    """Public, fun confirmation page for a booked date — shareable with friends."""
+async def _requests_html(db, user_id: int, request: Request, status: str = "all") -> HTMLResponse:
+    if status == "pending":
+        where = "AND status='pending'"
+    elif status == "accepted":
+        where = "AND status='accepted'"
+    elif status == "declined":
+        where = "AND status='declined'"
+    else:
+        status = "all"
+        where = ""
+
+    reqs = [dict(r) for r in await (await db.execute(
+        f"""SELECT * FROM booking_requests WHERE slot_owner_id=? {where}
+            ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, created_at DESC""",
+        (user_id,)
+    )).fetchall()]
+
+    counts = dict(await (await db.execute(
+        """SELECT
+            SUM(1) AS total,
+            SUM(status='pending') AS pending,
+            SUM(status='accepted') AS accepted,
+            SUM(status='declined') AS declined
+           FROM booking_requests WHERE slot_owner_id=?""",
+        (user_id,)
+    )).fetchone())
+    total_count    = counts["total"]    or 0
+    pending_count  = counts["pending"]  or 0
+    accepted_count = counts["accepted"] or 0
+    declined_count = counts["declined"] or 0
+
+    return render(request, "partials/_requests.html",
+                  booking_requests=reqs,
+                  status_filter=status,
+                  total_count=total_count,
+                  pending_count=pending_count,
+                  accepted_count=accepted_count,
+                  declined_count=declined_count)
+
+
+async def _split_slot_on_accept(db, owner_id: int, req_start: str, req_end: str) -> None:
+    """
+    When an accepted booking covers part (or all) of an availability window, split the window:
+    - One-off slot: mark it booked, insert any head/tail remainder as new available slots.
+    - Recurring occurrence: insert head/tail as new one-off available slots; the recurring
+      occurrence itself is blocked at display time via the accepted booking_request overlap check.
+    """
+    # --- One-off slot path ---
+    slot = await (await db.execute(
+        "SELECT * FROM availability_slots WHERE user_id=? AND start_time <= ? AND end_time >= ?"
+        " AND (status IS NULL OR status='available')",
+        (owner_id, req_start, req_end)
+    )).fetchone()
+
+    if slot:
+        slot = dict(slot)
+        await db.execute("UPDATE availability_slots SET status='booked' WHERE id=?", (slot["id"],))
+        if slot["start_time"] < req_start:
+            await db.execute(
+                "INSERT INTO availability_slots (user_id, start_time, end_time, status) VALUES (?,?,?,'available')",
+                (owner_id, slot["start_time"], req_start)
+            )
+        if req_end < slot["end_time"]:
+            await db.execute(
+                "INSERT INTO availability_slots (user_id, start_time, end_time, status) VALUES (?,?,?,'available')",
+                (owner_id, req_end, slot["end_time"])
+            )
+        return
+
+    # --- Recurring slot path ---
+    from ..services.calendar import _expand_recurring
+    req_date = req_start[:10]
+    year, month = int(req_date[:4]), int(req_date[5:7])
+    recurring = [dict(r) for r in await (await db.execute(
+        "SELECT * FROM recurring_slots WHERE user_id=? AND active=1", (owner_id,)
+    )).fetchall()]
+
+    for occ in _expand_recurring(recurring, year, month):
+        if (occ["start_time"][:10] == req_date
+                and occ["start_time"] <= req_start
+                and occ["end_time"] >= req_end):
+            # Occurrence found; insert one-off remainder slots for the host's remaining availability
+            if occ["start_time"] < req_start:
+                await db.execute(
+                    "INSERT INTO availability_slots (user_id, start_time, end_time, status) VALUES (?,?,?,'available')",
+                    (owner_id, occ["start_time"], req_start)
+                )
+            if req_end < occ["end_time"]:
+                await db.execute(
+                    "INSERT INTO availability_slots (user_id, start_time, end_time, status) VALUES (?,?,?,'available')",
+                    (owner_id, req_end, occ["end_time"])
+                )
+            break
+
+
+@router.get("/dashboard/requests", response_class=HTMLResponse)
+async def dashboard_requests(request: Request, status: str = Query("all")):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401)
     db = await get_db()
     try:
-        req = await (await db.execute(
-            """SELECT r.*, a.start_time, a.end_time, u.name as host_name
-               FROM date_requests r JOIN availability_slots a ON r.slot_id=a.id
-               JOIN users u ON a.user_id=u.id
-               WHERE r.share_token=? AND r.status='approved'""",
-            (share_token,))).fetchone()
+        return await _requests_html(db, user["id"], request, status)
     finally:
         await db.close()
 
-    if not req:
-        return HTMLResponse(
-            "<div class='text-center py-20'><h1 class='text-2xl font-bold'>Date not found</h1></div>"
+
+@router.post("/requests/{request_id}/accept", response_class=HTMLResponse)
+async def accept_request(request: Request, request_id: int):
+    user = await get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401)
+    db = await get_db()
+    try:
+        req_row = await (await db.execute(
+            "SELECT * FROM booking_requests WHERE id=? AND slot_owner_id=?",
+            (request_id, user["id"])
+        )).fetchone()
+        if not req_row:
+            raise HTTPException(status_code=404)
+        req_row = dict(req_row)
+
+        await db.execute(
+            "UPDATE booking_requests SET status='accepted' WHERE id=?", (request_id,)
         )
+        await _split_slot_on_accept(db, user["id"], req_row["requested_start"], req_row["requested_end"])
+        await db.commit()
+        return await _requests_html(db, user["id"], request, "all")
+    finally:
+        await db.close()
 
-    return render(request, "date_share.html", req=dict(req))
 
-
-@router.get("/requests/{request_id}/detail", response_class=HTMLResponse)
-async def request_detail(request: Request, request_id: int):
+@router.post("/requests/{request_id}/decline", response_class=HTMLResponse)
+async def decline_request(request: Request, request_id: int):
     user = await get_current_user(request)
     if not user:
         raise HTTPException(status_code=401)
     db = await get_db()
     try:
-        req = await (await db.execute(
-            """SELECT r.*, a.start_time, a.end_time, u.name as host_name
-               FROM date_requests r JOIN availability_slots a ON r.slot_id=a.id
-               JOIN users u ON a.user_id=u.id WHERE r.id=? AND a.user_id=?""",
-            (request_id, user["id"]))).fetchone()
-        if not req:
-            return HTMLResponse("Not found", status_code=404)
-        return render(request, "partials/_request_detail.html", req=dict(req), status=req["status"], base_url=settings.BASE_URL)
-    finally:
-        await db.close()
-
-
-@router.post("/requests/{request_id}/approve")
-async def approve_request(request: Request, request_id: int):
-    user = await get_current_user(request)
-    if not user:
-        raise HTTPException(status_code=401)
-    db = await get_db()
-    try:
-        req = await (await db.execute(
-            """SELECT r.*, a.start_time, a.end_time FROM date_requests r
-               JOIN availability_slots a ON r.slot_id=a.id WHERE r.id=? AND a.user_id=?""",
-            (request_id, user["id"]))).fetchone()
-        if not req:
-            return HTMLResponse("Not found", status_code=404)
-
-        share_token = generate_token()
         await db.execute(
-            "UPDATE date_requests SET status='approved', share_token=? WHERE id=?",
-            (share_token, request_id))
-
-        prop_start = req["proposed_start"] or req["start_time"]
-        prop_end = req["proposed_end"] or req["end_time"]
-        await _split_slot_around_booking(db, req["slot_id"], prop_start, prop_end)
+            "UPDATE booking_requests SET status='declined' WHERE id=? AND slot_owner_id=?",
+            (request_id, user["id"])
+        )
         await db.commit()
+        return await _requests_html(db, user["id"], request, "all")
     finally:
         await db.close()
-
-    if request.headers.get("HX-Request"):
-        return await _dashboard_response(request, user)
-    return render(request, "partials/request_card.html", req=dict(req), status="approved", base_url=settings.BASE_URL)
-
-
-@router.post("/requests/{request_id}/deny")
-async def deny_request(request: Request, request_id: int, decline_reason: str = Form("")):
-    user = await get_current_user(request)
-    if not user: raise HTTPException(status_code=401)
-    decline_reason = decline_reason.strip()[:280]
-
-    db = await get_db()
-    try:
-        req = await (await db.execute(
-            "SELECT r.* FROM date_requests r JOIN availability_slots a ON r.slot_id=a.id WHERE r.id=? AND a.user_id=?", (request_id, user["id"]))).fetchone()
-        if not req: return HTMLResponse("Not found", status_code=404)
-    finally:
-        await db.close()
-
-    req_dict = dict(req)
-
-    # Attempt refund first — surface failures to the host before marking as declined.
-    if req_dict.get("stripe_session_id") and req_dict.get("deposit_paid_cents", 0) > 0:
-        try:
-            session = stripe.checkout.Session.retrieve(req_dict["stripe_session_id"])
-            pi = stripe.PaymentIntent.retrieve(session.payment_intent)
-            stripe.Refund.create(payment_intent=pi.id)
-        except Exception as e:
-            logger.error("Refund failed for request %d: %s", request_id, e)
-            return HTMLResponse(
-                '<p class="text-sm text-red-500 text-center py-2">⚠️ Couldn\'t return the tip automatically — go to your Stripe dashboard to process it manually, then pass again.</p>',
-                status_code=200,
-            )
-
-    db = await get_db()
-    try:
-        await db.execute(
-            "UPDATE date_requests SET status='declined', decline_reason=? WHERE id=?",
-            (decline_reason or None, request_id))
-        await db.commit()
-    finally:
-        await db.close()
-
-    if req_dict.get("date_phone"):
-        msg = "Your date request wasn't accepted this time."
-        if decline_reason:
-            msg += f' She left a note: "{decline_reason}"'
-        await send_sms(req_dict["date_phone"], msg)
-
-    if request.headers.get("HX-Request"):
-        return await _dashboard_response(request, user)
-    return HTMLResponse("")
-
-
-@router.post("/requests/{request_id}/cancel")
-async def cancel_request(request: Request, request_id: int):
-    db = await get_db()
-    try:
-        req = await (await db.execute(
-            "SELECT r.*, a.user_id, a.start_time, a.end_time FROM date_requests r JOIN availability_slots a ON r.slot_id=a.id WHERE r.id=?", (request_id,))).fetchone()
-        if not req: return HTMLResponse("Not found", status_code=404)
-    finally:
-        await db.close()
-
-    req_dict = dict(req)
-
-    # Attempt refund first — if it fails, abort and surface the error to the host.
-    if req_dict.get("stripe_session_id") and req_dict.get("deposit_paid_cents", 0) > 0:
-        try:
-            session = stripe.checkout.Session.retrieve(req_dict["stripe_session_id"])
-            pi = stripe.PaymentIntent.retrieve(session.payment_intent)
-            stripe.Refund.create(payment_intent=pi.id)
-        except Exception as e:
-            logger.error("Refund failed for request %d: %s", request_id, e)
-            return HTMLResponse(
-                '<p class="text-sm text-red-500 text-center py-2">⚠️ Couldn\'t return the tip automatically — go to your Stripe dashboard to process it manually, then cancel again.</p>',
-                status_code=200,
-            )
-
-    prop_start = req_dict.get("proposed_start") or req_dict["start_time"]
-    prop_end = req_dict.get("proposed_end") or req_dict["end_time"]
-
-    db = await get_db()
-    try:
-        try:
-            await db.execute("DELETE FROM reminders WHERE request_id=?", (request_id,))
-            await db.execute("DELETE FROM date_requests WHERE id=?", (request_id,))
-            await _restore_cancelled_booking(db, req_dict["user_id"], prop_start, prop_end)
-        except Exception:
-            await db.rollback()
-            raise
-        await db.commit()
-    finally:
-        await db.close()
-
-    user = await get_current_user(request)
-    if user and request.headers.get("HX-Request"):
-        return await _dashboard_response(request, user)
-    return HTMLResponse("")
-
-
-async def _dashboard_response(request, user):
-    from ..db import get_db
-    from ..services.calendar import _build_calendar
-    from datetime import date
-
-    db = await get_db()
-    try:
-        slots = [dict(r) for r in await (await db.execute(
-            "SELECT * FROM availability_slots WHERE user_id=? ORDER BY start_time", (user["id"],))).fetchall()]
-        requests = [dict(r) for r in await (await db.execute(
-            "SELECT r.*, a.start_time, a.end_time FROM date_requests r JOIN availability_slots a ON r.slot_id=a.id WHERE a.user_id=? ORDER BY r.created_at DESC", (user["id"],))).fetchall()]
-        approved = [dict(r) for r in await (await db.execute(
-            "SELECT r.id, r.slot_id FROM date_requests r JOIN availability_slots a ON r.slot_id=a.id WHERE a.user_id=? AND r.status='approved'", (user["id"],))).fetchall()]
-        booked = [r["start_time"][:10] for r in await (await db.execute(
-            "SELECT a.start_time FROM date_requests r JOIN availability_slots a ON r.slot_id=a.id WHERE a.user_id=? AND r.status='approved'", (user["id"],))).fetchall()]
-    finally:
-        await db.close()
-
-    today = date.today()
-    cal = _build_calendar(today.year, today.month, slots, booked, approved)
-
-    resp = templates.TemplateResponse(request, "partials/_dashboard_wrapper.html", {
-        "request": request, "slots": slots, "requests": requests, "user": user,
-        "month": today.month, "year": today.year, "cal": cal, "booked_dates": booked,
-        "base_url": settings.BASE_URL,
-    })
-    resp.headers["HX-Trigger"] = "closeModal"
-    return resp

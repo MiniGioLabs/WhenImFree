@@ -15,7 +15,7 @@ _db_path: str | None = None
 def _get_db_path() -> str:
     global _db_path
     if _db_path is None:
-        _db_path = settings.DATABASE_PATH or str(Path(__file__).parent.parent.parent / "calendate.db")
+        _db_path = settings.DATABASE_PATH or str(Path(__file__).parent.parent.parent / "whenimfree.db")
     return _db_path
 
 
@@ -32,72 +32,62 @@ async def init_db() -> None:
     db = await get_db()
     try:
         await db.executescript("""
+            CREATE TABLE IF NOT EXISTS recurring_slots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                dows TEXT NOT NULL,
+                start_hhmm TEXT NOT NULL,
+                end_hhmm TEXT NOT NULL,
+                label TEXT,
+                active INTEGER DEFAULT 1,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
                 phone TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
                 name TEXT NOT NULL,
-                booking_slug TEXT UNIQUE,
-                stripe_account_id TEXT,
-                stripe_onboarding_complete INTEGER DEFAULT 0,
                 timezone TEXT DEFAULT 'US/Eastern',
+                avatar_url TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS booking_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                slot_owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                guest_name TEXT NOT NULL,
+                guest_phone TEXT NOT NULL,
+                requested_start TEXT NOT NULL,
+                requested_end TEXT NOT NULL,
+                note TEXT DEFAULT '',
+                status TEXT DEFAULT 'pending',
                 created_at TEXT DEFAULT (datetime('now'))
             );
 
             CREATE TABLE IF NOT EXISTS availability_slots (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL REFERENCES users(id),
-                token TEXT UNIQUE NOT NULL,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                 start_time TEXT NOT NULL,
                 end_time TEXT NOT NULL,
-                deposit_cents INTEGER DEFAULT 0,
                 created_at TEXT DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS date_requests (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                slot_id INTEGER NOT NULL REFERENCES availability_slots(id),
-                date_name TEXT,
-                date_phone TEXT,
-                status TEXT DEFAULT 'pending',
-                proposed_start TEXT,
-                proposed_end TEXT,
-                location TEXT,
-                label TEXT,
-                share_token TEXT UNIQUE,
-                stripe_session_id TEXT,
-                deposit_paid_cents INTEGER DEFAULT 0,
-                deposit_cents INTEGER DEFAULT 0,
-                decline_reason TEXT,
-                created_at TEXT DEFAULT (datetime('now'))
-            );
-
-            CREATE TABLE IF NOT EXISTS reminders (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                request_id INTEGER NOT NULL REFERENCES date_requests(id),
-                send_at TEXT NOT NULL,
-                reminder_type TEXT NOT NULL
             );
         """)
-
-        cols = [r["name"] for r in await (await db.execute("PRAGMA table_info(users)")).fetchall()]
-        if "avatar_url" not in cols:
-            await db.execute("ALTER TABLE users ADD COLUMN avatar_url TEXT")
-        if "deposit_cents" not in cols:
-            await db.execute("ALTER TABLE users ADD COLUMN deposit_cents INTEGER DEFAULT 0")
-
-        req_cols = [r["name"] for r in await (await db.execute("PRAGMA table_info(date_requests)")).fetchall()]
-        if "deposit_cents" not in req_cols:
-            await db.execute("ALTER TABLE date_requests ADD COLUMN deposit_cents INTEGER DEFAULT 0")
-        if "decline_reason" not in req_cols:
-            await db.execute("ALTER TABLE date_requests ADD COLUMN decline_reason TEXT")
 
         await db.executescript("""
             CREATE INDEX IF NOT EXISTS idx_slots_user_id ON availability_slots(user_id);
-            CREATE INDEX IF NOT EXISTS idx_requests_slot_id ON date_requests(slot_id);
-            CREATE INDEX IF NOT EXISTS idx_requests_status ON date_requests(status);
-            CREATE INDEX IF NOT EXISTS idx_requests_slot_status ON date_requests(slot_id, status);
+            CREATE INDEX IF NOT EXISTS idx_slots_start ON availability_slots(start_time);
+            CREATE INDEX IF NOT EXISTS idx_recurring_user ON recurring_slots(user_id);
+            CREATE INDEX IF NOT EXISTS idx_requests_owner ON booking_requests(slot_owner_id);
         """)
+
+        # Migrate: add status column to availability_slots if missing
+        try:
+            await db.execute("ALTER TABLE availability_slots ADD COLUMN status TEXT DEFAULT 'available'")
+            await db.commit()
+        except Exception:
+            pass
 
         await db.commit()
         logger.info("Database initialized")

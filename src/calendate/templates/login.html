@@ -1,39 +1,46 @@
 {% extends "base.html" %}
-{% block title %}Log in — CalenDate{% endblock %}
+{% block title %}Log in — WhenImFree{% endblock %}
 {% block content %}
 <div class="max-w-sm mx-auto">
-    <h1 class="text-2xl font-bold mb-1">Welcome back</h1>
-    <p class="text-sm text-gray-400 mb-6">We missed you.</p>
-    {% if error %}<p class="text-red-500 text-sm mb-4">{{ error }}</p>{% endif %}
+    <h1 class="text-2xl font-black mb-1">Welcome back 👋</h1>
+    <p class="text-sm text-gray-400 mb-6">Your friends are waiting.</p>
+    {% if error %}<p class="text-red-500 text-sm mb-4 bg-red-50 px-4 py-3 rounded-xl">{{ error }}</p>{% endif %}
     <form method="POST" class="space-y-4">
-        <input type="tel" name="phone" required placeholder="(555) 123-4567" maxlength="14"
-               class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none"
-               id="phone-input" inputmode="numeric" autocomplete="tel">
-        <input type="password" name="password" required minlength="6" maxlength="20" placeholder="Password"
-               class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none">
-        <button type="submit" class="w-full bg-brand text-white py-3 rounded-xl font-medium hover:bg-brand-dark">Log in</button>
+        <div>
+            <input type="tel" name="phone" id="phone-input" required
+                   placeholder="(555) 555-1234" autocomplete="tel"
+                   inputmode="numeric" maxlength="14"
+                   class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none transition-shadow">
+            <p id="phone-hint" class="text-xs text-gray-400 mt-1 pl-1">US numbers only</p>
+        </div>
+        <input type="password" name="password" required minlength="6" maxlength="20" placeholder="Password" autocomplete="current-password"
+               class="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-brand outline-none transition-shadow">
+        <button type="submit" class="w-full bg-brand text-white py-3 rounded-xl font-bold hover:bg-brand-dark transition-all hover:scale-[1.02] active:scale-95 shadow-sm shadow-brand/30">Log in</button>
     </form>
-    <p class="text-sm text-gray-500 mt-4 text-center">No account? <a href="/signup" class="text-brand">Sign up</a></p>
+    <p class="text-sm text-gray-500 mt-4 text-center">No account? <a href="/signup" class="text-brand font-medium hover:underline">Sign up free</a></p>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
-const phoneInput = document.getElementById('phone-input');
+(function() {
+    const input = document.getElementById('phone-input');
+    const hint  = document.getElementById('phone-hint');
 
-function formatPhone(digits) {
-    if (digits.length === 0) return '';
-    if (digits.length <= 3) return `(${digits}`;
-    if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-}
+    function fmtPhone(digits) {
+        if (digits.length <= 3) return digits;
+        if (digits.length <= 6) return '(' + digits.slice(0,3) + ') ' + digits.slice(3);
+        return '(' + digits.slice(0,3) + ') ' + digits.slice(3,6) + '-' + digits.slice(6);
+    }
 
-phoneInput.addEventListener('keydown', function(e) {
-    const allowed = ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Tab', 'Home', 'End'];
-    if (!allowed.includes(e.key) && !/^\d$/.test(e.key)) e.preventDefault();
-});
-
-phoneInput.addEventListener('input', function() {
-    const digits = this.value.replace(/\D/g, '').slice(0, 10);
-    this.value = formatPhone(digits);
-});
+    input.addEventListener('input', function() {
+        const digits = this.value.replace(/\D/g, '').slice(0, 10);
+        this.value = fmtPhone(digits);
+        const done = digits.length === 10;
+        hint.textContent = done ? '✓ Valid US number' : digits.length > 0 ? digits.length + '/10 digits' : 'US numbers only';
+        hint.className = 'text-xs mt-1 pl-1 ' + (done ? 'text-green-500' : digits.length > 0 ? 'text-red-400' : 'text-gray-400');
+        this.setCustomValidity(done ? '' : 'Enter a 10-digit US phone number.');
+    });
+})();
 </script>
 {% endblock %}

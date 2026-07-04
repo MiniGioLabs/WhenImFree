@@ -1,12 +1,10 @@
-"""Host profile/settings routes."""
+"""Profile/settings routes."""
 
 import uuid
-import stripe
 from fastapi import APIRouter, File, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from ..auth import get_current_user
-from ..config import settings as app_settings
 from ..db import get_db
 from ..utils import render, static_dir, upload_to_s3
 
@@ -24,6 +22,23 @@ async def settings_page(request: Request):
     return render(request, "settings.html", user=user)
 
 
+@router.post("/settings/profile")
+async def update_profile(request: Request, name: str = Form(...), timezone: str = Form("US/Eastern")):
+    user = await get_current_user(request)
+    if not user:
+        return RedirectResponse("/login", status_code=302)
+    name = name.strip()
+    if not name or len(name) > 40:
+        return render(request, "settings.html", user=user, error="Name must be 1–40 characters.")
+    db = await get_db()
+    try:
+        await db.execute("UPDATE users SET name=?, timezone=? WHERE id=?", (name, timezone, user["id"]))
+        await db.commit()
+    finally:
+        await db.close()
+    return RedirectResponse("/settings?saved=1", status_code=302)
+
+
 @router.post("/settings/avatar", response_class=HTMLResponse)
 async def update_avatar(request: Request, avatar: UploadFile = File(...)):
     user = await get_current_user(request)
@@ -38,11 +53,9 @@ async def update_avatar(request: Request, avatar: UploadFile = File(...)):
     if len(data) > MAX_AVATAR_BYTES:
         return render(request, "settings.html", user=user, error="Image must be under 5MB.")
 
-    user_id = user["id"]
     uid = uuid.uuid4().hex[:8]
-    filename = f"{user_id}-{uid}.{ext}"
+    filename = f"{user['id']}-{uid}.{ext}"
 
-    # Try S3 first, fall back to local filesystem
     s3_url = upload_to_s3(data, filename, avatar.content_type)
     if s3_url:
         avatar_url = s3_url
@@ -59,58 +72,4 @@ async def update_avatar(request: Request, avatar: UploadFile = File(...)):
     finally:
         await db.close()
 
-    return RedirectResponse("/settings", status_code=302)
-
-
-
-
-@router.post("/settings/stripe/connect", response_class=HTMLResponse)
-async def connect_stripe(request: Request):
-    user = await get_current_user(request)
-    if not user:
-        return RedirectResponse("/login", status_code=302)
-
-    try:
-        account_id = user.get("stripe_account_id")
-        if not account_id:
-            account = stripe.Account.create(type="express", email=None)
-            account_id = account.id
-            db = await get_db()
-            try:
-                await db.execute("UPDATE users SET stripe_account_id=? WHERE id=?", (account_id, user["id"]))
-                await db.commit()
-            finally:
-                await db.close()
-
-        link = stripe.AccountLink.create(
-            account=account_id,
-            refresh_url=f"{app_settings.BASE_URL}/settings",
-            return_url=f"{app_settings.BASE_URL}/settings/stripe/return",
-            type="account_onboarding",
-        )
-        return RedirectResponse(link.url, status_code=302)
-    except stripe.StripeError as e:
-        return render(request, "settings.html", user=user,
-                      stripe_error="Couldn't connect to Stripe — check your Stripe configuration.")
-
-
-@router.get("/settings/stripe/return", response_class=HTMLResponse)
-async def stripe_connect_return(request: Request):
-    user = await get_current_user(request)
-    if not user:
-        return RedirectResponse("/login", status_code=302)
-
-    if user.get("stripe_account_id"):
-        try:
-            account = stripe.Account.retrieve(user["stripe_account_id"])
-            complete = 1 if account.get("details_submitted") else 0
-            db = await get_db()
-            try:
-                await db.execute("UPDATE users SET stripe_onboarding_complete=? WHERE id=?", (complete, user["id"]))
-                await db.commit()
-            finally:
-                await db.close()
-        except stripe.StripeError:
-            pass
-
-    return RedirectResponse("/settings", status_code=302)
+    return RedirectResponse("/settings?saved=1", status_code=302)

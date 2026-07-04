@@ -1,0 +1,28 @@
+{% if recurring %}
+<div class="space-y-2 mt-1">
+    {% for rule in recurring %}
+    <div class="flex items-center gap-2 px-3 py-2.5 rounded-xl pop-in transition-opacity
+                {{ 'bg-sky/8' if rule.active else 'bg-gray-50 opacity-50' }}"
+         style="animation-delay:{{ loop.index0 * 0.04 }}s">
+        <div class="flex-1 min-w-0">
+            <p class="text-sm font-bold text-gray-700 truncate">{{ format_dows(rule.dows) }}</p>
+            <p class="text-xs text-gray-400">{{ format_hhmm(rule.start_hhmm) }} – {{ format_hhmm(rule.end_hhmm) }}{% if rule.label %} · {{ rule.label }}{% endif %}</p>
+        </div>
+        <button hx-post="/recurring/{{ rule.id }}/toggle"
+                hx-target="#schedule-list-container"
+                hx-swap="innerHTML"
+                class="text-xs px-2 py-1 rounded-lg font-semibold transition-colors shrink-0
+                       {{ 'bg-accent/15 text-green-700 hover:bg-accent/25' if rule.active else 'bg-gray-200 text-gray-500 hover:bg-gray-300' }}">
+            {{ 'On' if rule.active else 'Off' }}
+        </button>
+        <button hx-delete="/recurring/{{ rule.id }}"
+                hx-target="#schedule-list-container"
+                hx-swap="innerHTML"
+                hx-confirm="Remove this recurring schedule?"
+                class="text-gray-300 hover:text-red-500 transition-colors text-base shrink-0 leading-none">✕</button>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="text-xs text-gray-400 text-center py-4">No weekly rules yet — add one above! 👆</p>
+{% endif %}
